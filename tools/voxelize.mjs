@@ -227,7 +227,7 @@ for (const file of readdirSync(SRC).filter(f => f.endsWith('.glb') && FILTER.tes
         if (q.dist > 2 * h) far++;
       }
       // OBJ with labels-only texture coordinates: vt per (vertex, chart)
-      const name = `${model}__${(m.name || 'mesh' + mi).replace(/[^\w-]+/g, '_')}__v${N}`;
+      const name = `${model}__${mi}_${(m.name || "mesh").replace(/[^\w-]+/g, "_")}__v${N}`; // index keeps names unique
       const lines = ['# seamline: labels-only', `# source ${model}/${m.name} voxels ${N} smooth ${SMOOTH} charts ${ref.charts}`];
       for (let v = 0; v < P.length; v += 3) lines.push(`v ${+P[v].toFixed(6)} ${+P[v + 1].toFixed(6)} ${+P[v + 2].toFixed(6)}`);
       const vt = new Map(); const vtl = [];
