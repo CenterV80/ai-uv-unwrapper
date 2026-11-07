@@ -15,7 +15,10 @@ export const DEFAULT_PARAMS = {
   maxDepth: 14,
   dihedralWeight: 0.2,   // how much geometry (vs AI probability) steers automatic cuts
   rejectOverlap: true,   // split charts whose UVs overlap themselves (LSCM does not prevent this)
-  overlapTolerance: 0.005, // ... when the overlapped share of the chart's UV area exceeds this (always reported by metrics)
+  overlapTolerance: 0.0005, // ... when the overlapped share of the chart's UV area exceeds this
+                           //     (kept below the 0.1% validity limit used by the metrics)
+  flipTolerance: 0.00005,  // flipped share of the chart's 3D area that triggers a repair
+  maxSlits: 4,             // local repairs (cut from the problem area to the border) before splitting the chart
 };
 
 /** Heap of (key, id) with float keys. */
@@ -239,8 +242,11 @@ function farthestFace(mesh, faces, start, faceLocal, centroid) {
   return far;
 }
 
-/** Does a chart's UV layout cover any spot twice? (raster test, resolution scales with size) */
-function chartSelfOverlaps(uv, T, tolerance) {
+/**
+ * Faces of a chart whose layout is invalid: covered twice in UV (raster test) or flipped.
+ * Returns null when the chart is within tolerance, else the local indices of the offending faces.
+ */
+function chartProblems(P, T, uv, overlapTol, flipTol) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < uv.length; i += 2) { x0 = Math.min(x0, uv[i]); x1 = Math.max(x1, uv[i]); y0 = Math.min(y0, uv[i + 1]); y1 = Math.max(y1, uv[i + 1]); }
   const size = Math.max(x1 - x0, y1 - y0) || 1;
@@ -248,8 +254,60 @@ function chartSelfOverlaps(uv, T, tolerance) {
   const res = Math.max(256, Math.min(1024, Math.round(Math.sqrt(nf) * 16)));
   const tri = new Float64Array(6 * nf);
   for (let f = 0; f < nf; f++) for (let k = 0; k < 3; k++) { tri[6 * f + 2 * k] = uv[2 * T[3 * f + k]]; tri[6 * f + 2 * k + 1] = uv[2 * T[3 * f + k] + 1]; }
-  const r = rasterOverlap(tri, res, [x0, y0, size]);
-  return r.overlapped > Math.max(2, r.covered * tolerance);
+  const r = rasterOverlap(tri, res, [x0, y0, size], true);
+  const bad = new Set(r.overlapped > Math.max(2, r.covered * overlapTol) ? r.overlapTris : []);
+  // flipped faces (the layout has already been mirrored so that most of the area is positive)
+  let A3 = 0, flipA = 0; const flipped = [];
+  for (let f = 0; f < nf; f++) {
+    const i = T[3 * f], j = T[3 * f + 1], k = T[3 * f + 2];
+    const a2 = (uv[2 * j] - uv[2 * i]) * (uv[2 * k + 1] - uv[2 * i + 1]) - (uv[2 * k] - uv[2 * i]) * (uv[2 * j + 1] - uv[2 * i + 1]);
+    const ux = P[3 * j] - P[3 * i], uy = P[3 * j + 1] - P[3 * i + 1], uz = P[3 * j + 2] - P[3 * i + 2];
+    const vx = P[3 * k] - P[3 * i], vy = P[3 * k + 1] - P[3 * i + 1], vz = P[3 * k + 2] - P[3 * i + 2];
+    const a3 = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+    A3 += a3;
+    if (a2 <= 0) { flipA += a3; flipped.push(f); }
+  }
+  if (flipA > flipTol * A3) for (const f of flipped) bad.add(f);
+  return bad.size ? { faces: [...bad], pairs: bad.size && r.pairs.length && r.overlapped > Math.max(2, r.covered * overlapTol) ? r.pairs : [] } : null;
+}
+
+/**
+ * Local repair: a cut ("dart") from the middle of the problem area to the chart border along the
+ * most seam-like edges. The chart stays one disk-shaped piece, but the fold can open up.
+ */
+function slitPath(mesh, W, problemFaces, cost, minLen = 3) {
+  const nv = W.vert.length, T = W.T, P = W.P;
+  const onB = new Uint8Array(nv);
+  for (let i = 0; i < W.bEdges.length; i++) onB[W.bEdges[i]] = 1;
+  // area-weighted centre of the problem area, then the closest interior vertex of those faces
+  let cx = 0, cy = 0, cz = 0, n = 0;
+  const cand = new Set();
+  for (const f of problemFaces) for (let k = 0; k < 3; k++) { const v = T[3 * f + k]; cx += P[3 * v]; cy += P[3 * v + 1]; cz += P[3 * v + 2]; n++; if (!onB[v]) cand.add(v); }
+  if (!cand.size) return null;
+  cx /= n; cy /= n; cz /= n;
+  let start = -1, bd = Infinity;
+  for (const v of cand) { const d = (P[3 * v] - cx) ** 2 + (P[3 * v + 1] - cy) ** 2 + (P[3 * v + 2] - cz) ** 2; if (d < bd) { bd = d; start = v; } }
+  const adj = Array.from({ length: nv }, () => []);
+  for (let t = 0; t < T.length; t += 3) for (let k = 0; k < 3; k++) { const a = T[t + k], b = T[t + (k + 1) % 3]; adj[a].push(b); adj[b].push(a); }
+  const dist = new Float64Array(nv).fill(Infinity), prev = new Int32Array(nv).fill(-1);
+  const h = new MinHeap(); dist[start] = 0; h.push(0, start);
+  let target = -1;
+  while (h.size) {
+    const d = h.topKey(), v = h.pop();
+    if (d > dist[v]) continue;
+    if (onB[v]) { target = v; break; }
+    for (const w of adj[v]) {
+      const e = meshEdge(mesh, W.vert[v], W.vert[w]);
+      if (e < 0) continue;
+      const nd = d + (mesh.edgeLen[e] / mesh.meanEdgeLen) * (0.08 + Math.max(0, 1 - cost[e]) ** 2);
+      if (nd < dist[w]) { dist[w] = nd; prev[w] = v; h.push(nd, w); }
+    }
+  }
+  if (target < 0) return null;
+  const path = [];
+  for (let v = target; prev[v] >= 0; v = prev[v]) { const e = meshEdge(mesh, W.vert[v], W.vert[prev[v]]); if (e >= 0) path.push(e); }
+  // a dart that starts next to the border cannot open a fold: the problem is the border itself
+  return path.length >= minLen ? path : null;
 }
 
 /** Mesh edge between mesh vertices a and b (or -1). */
@@ -320,10 +378,10 @@ function connectBoundaryLoops(mesh, W, cost) {
  * Split a chart in two with a watershed flood from two far-apart seeds. Crossing an edge costs
  * its seam likelihood, so the meeting front settles on the most seam-like edges.
  */
-function splitChart(mesh, faces, cost, seam, faceLocal, centroid) {
+function splitChart(mesh, faces, cost, seam, faceLocal, centroid, seeds = null) {
   const { edgeF, faceEdges, diag } = mesh;
-  const a = farthestFace(mesh, faces, faces[0], faceLocal, centroid);
-  const b = farthestFace(mesh, faces, a, faceLocal, centroid);
+  const a = seeds ? seeds[0] : farthestFace(mesh, faces, faces[0], faceLocal, centroid);
+  const b = seeds ? seeds[1] : farthestFace(mesh, faces, a, faceLocal, centroid);
   if (a === b) return null;
   for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = i;
   const label = new Int8Array(faces.length).fill(-1);
@@ -412,16 +470,16 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
   const faceLocal = new Int32Array(nF).fill(-1);
   const inSet = new Uint8Array(nF);
   const all = Array.from({ length: nF }, (_, i) => i);
-  const queue = componentsOf(mesh, all, seam, inSet).map(c => ({ faces: c, depth: 0 }));
+  const queue = componentsOf(mesh, all, seam, inSet).map(c => ({ faces: c, depth: 0, slits: 0 }));
   const charts = [];
   let processedFaces = 0;
-  let autoCuts = 0, overlapSplits = 0;
+  let autoCuts = 0, overlapSplits = 0, slitRepairs = 0;
 
   while (queue.length) {
-    const { faces, depth } = queue.pop();
+    const { faces, depth, slits = 0 } = queue.pop();
     const W = buildWedges(mesh, faces, seam, faceLocal);
     let ok = W.chi === 1 && W.boundaryVerts.length >= 2;
-    let overlapBad = false;
+    let overlapBad = false, problemFaces = null;
     let res = null, dist = null;
     if (ok) {
       const pins = farthestPins(W.P, W.boundaryVerts);
@@ -429,8 +487,8 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
       dist = chartDistortion(W.P, W.T, res.uv);
       if (dist.mirrored) for (let i = 0; i < res.uv.length; i += 2) res.uv[i] = -res.uv[i];
       if (!isFinite(dist.distortion)) ok = false;
-      else if ((dist.distortion > params.maxDistortion || dist.flipFrac > 0.002) && faces.length >= 6 && depth < params.maxDepth) ok = false;
-      else if (params.rejectOverlap && faces.length >= 2 && chartSelfOverlaps(res.uv, W.T, params.overlapTolerance)) { ok = false; overlapBad = true; overlapSplits++; }
+      else if (dist.distortion > params.maxDistortion && faces.length >= 6 && depth < params.maxDepth) ok = false;
+      else if (params.rejectOverlap && faces.length >= 2 && (problemFaces = chartProblems(W.P, W.T, res.uv, params.overlapTolerance, params.flipTolerance))) { ok = false; overlapBad = true; }
     }
     // topology problems (not a disk) are always cut further: every split strictly shrinks the chart,
     // so this terminates; distortion-driven splits are limited by maxDepth
@@ -443,14 +501,36 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
         for (const e of path) if (!seam[e]) { seam[e] = 1; added++; }
         if (added) {
           autoCuts += added;
-          for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth });
+          for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth, slits });
           continue;
         }
       }
     }
+    // invalid layout: first try local darts from the problem area to the border, then split
+    if (overlapBad && slits < params.maxSlits) {
+      const path = slitPath(mesh, W, problemFaces.faces, cost);
+      let added = 0;
+      if (path) for (const e of path) if (!seam[e]) { seam[e] = 1; added++; }
+      if (added) {
+        autoCuts += added; slitRepairs++;
+        for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth, slits: slits + 1 });
+        continue;
+      }
+    }
+    if (overlapBad) overlapSplits++;
     if (!ok && faces.length > 1 && (mustSplit || depth < params.maxDepth)) {
       // NOTE: the flood barrier is the seam *likelihood*: high cost = good place for a seam
-      const cut = splitChart(mesh, faces, cost, seam, faceLocal, centroid);
+      // for an overlap, separate the two pieces of surface that land on each other
+      let seeds = null;
+      if (overlapBad && problemFaces.pairs.length) {
+        let best = -1;
+        for (let i = 0; i < problemFaces.pairs.length; i += 2) {
+          const fa = faces[problemFaces.pairs[i]], fb = faces[problemFaces.pairs[i + 1]];
+          const d = (centroid[3 * fa] - centroid[3 * fb]) ** 2 + (centroid[3 * fa + 1] - centroid[3 * fb + 1]) ** 2 + (centroid[3 * fa + 2] - centroid[3 * fb + 2]) ** 2;
+          if (d > best && fa !== fb) { best = d; seeds = [fa, fb]; }
+        }
+      }
+      const cut = splitChart(mesh, faces, cost, seam, faceLocal, centroid, seeds);
       if (cut && cut.length) {
         for (const e of cut) seam[e] = 1;
         autoCuts += cut.length;
@@ -493,7 +573,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
     stats: {
       charts: charts.length,
       seamEdges: seam.reduce((s, x, e) => s + (x && !mesh.boundary[e] ? 1 : 0), 0),
-      autoCuts, overlapSplits,
+      autoCuts, overlapSplits, slitRepairs,
       distortion: distSum / (areaSum || 1),
       flips,
       packingEfficiency: packed.efficiency,

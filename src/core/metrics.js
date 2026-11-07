@@ -14,7 +14,7 @@ export function rasterOverlap(tri, res, box = [0, 0, 1], wantTris = false) {
   const n = tri.length / 6;
   const cnt = new Uint8Array(res * res);
   const owner = wantTris ? new Int32Array(res * res).fill(-1) : null;
-  const overlapTris = new Set();
+  const overlapTris = new Set(), pairs = [];
   const sc = res / bs;
   for (let t = 0; t < n; t++) {
     const x0 = (tri[6 * t] - bu) * sc, y0 = (tri[6 * t + 1] - bv) * sc;
@@ -35,13 +35,13 @@ export function rasterOverlap(tri, res, box = [0, 0, 1], wantTris = false) {
         if (w0 <= 0 || w1 <= 0 || w2 <= 0) continue;
         const k = j * res + i;
         if (cnt[k] < 255) cnt[k]++;
-        if (owner) { if (cnt[k] === 1) owner[k] = t; else { overlapTris.add(t); overlapTris.add(owner[k]); } }
+        if (owner) { if (cnt[k] === 1) owner[k] = t; else { overlapTris.add(t); overlapTris.add(owner[k]); if (pairs.length < 4096) pairs.push(owner[k], t); } }
       }
     }
   }
   let covered = 0, overlapped = 0;
   for (let k = 0; k < cnt.length; k++) { if (cnt[k]) covered++; if (cnt[k] > 1) overlapped++; }
-  return { covered, overlapped, overlapTris };
+  return { covered, overlapped, overlapTris, pairs };
 }
 
 /**
