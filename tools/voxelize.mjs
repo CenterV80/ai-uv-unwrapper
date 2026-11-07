@@ -8,6 +8,7 @@
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readGLB } from '../training/glb.mjs';
+import { readOBJ } from './load.mjs';
 import { buildMesh } from '../src/core/mesh.js';
 import { uvSeamsAndCharts } from '../src/core/metrics.js';
 
@@ -204,9 +205,10 @@ function taubin(P, F, iters) {
 // ------------------------------------------------------------------ main
 mkdirSync(OUT, { recursive: true });
 const manifest = [];
-for (const file of readdirSync(SRC).filter(f => f.endsWith('.glb') && FILTER.test(f)).sort()) {
-  const model = file.replace(/\.glb$/, '');
-  let meshes; try { meshes = readGLB(join(SRC, file)); } catch (e) { console.log('skip', model, e.message); continue; }
+for (const file of readdirSync(SRC).filter(f => /\.(glb|obj)$/i.test(f) && FILTER.test(f)).sort()) {
+  const model = file.replace(/\.(glb|obj)$/i, '');
+  // GLB: artist meshes with real UVs; OBJ: labels-only meshes (e.g. tools/gen-garments.mjs)
+  let meshes; try { meshes = /\.obj$/i.test(file) ? readOBJ(join(SRC, file)) : readGLB(join(SRC, file)); } catch (e) { console.log('skip', model, e.message); continue; }
   meshes.forEach((m, mi) => {
     const src = buildMesh(m.positions, m.indices, m.cornerUV);
     if (src.nF < 60 || src.nF > MAX_SRC_FACES) return;
@@ -227,7 +229,8 @@ for (const file of readdirSync(SRC).filter(f => f.endsWith('.glb') && FILTER.tes
         if (q.dist > 2 * h) far++;
       }
       // OBJ with labels-only texture coordinates: vt per (vertex, chart)
-      const name = `${model}__${mi}_${(m.name || "mesh").replace(/[^\w-]+/g, "_")}__v${N}`; // index keeps names unique
+      const meshTag = /\.obj$/i.test(file) ? String(mi) : `${mi}_${(m.name || 'mesh').replace(/[^\w-]+/g, '_')}`;
+      const name = `${model}__${meshTag}__v${N}`; // index keeps names unique
       const lines = ['# seamline: labels-only', `# source ${model}/${m.name} voxels ${N} smooth ${SMOOTH} charts ${ref.charts}`];
       for (let v = 0; v < P.length; v += 3) lines.push(`v ${+P[v].toFixed(6)} ${+P[v + 1].toFixed(6)} ${+P[v + 2].toFixed(6)}`);
       const vt = new Map(); const vtl = [];
