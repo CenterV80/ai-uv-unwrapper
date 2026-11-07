@@ -1,0 +1,14 @@
+{
+  "name": "seamline-uv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-assisted UV unwrapping in the browser: learned seam prediction + LSCM + packing",
+  "scripts": {
+    "serve": "node serve.mjs",
+    "train": "node training/train.mjs",
+    "test": "node tests/unwrap-test.mjs BoomBox Fox CesiumMan WaterBottle",
+    "licenses": "node training/fetch-licenses.mjs"
+  },
+  "devDependencies": { "three": "0.160.0" }
+}

@@ -1,0 +1,437 @@
+// Seam probabilities -> charts -> LSCM -> packing.
+import { UnionFind } from './mesh.js';
+import { lscm, chartDistortion } from './lscm.js';
+import { packCharts } from './pack.js';
+
+export const DEFAULT_PARAMS = {
+  threshold: 0.5,        // seam probability threshold
+  maxDistortion: 1.25,   // area-distortion tolerance per chart (1 = perfect)
+  minFragment: 3,        // seam fragments shorter than this many edges are dropped
+  padding: 4,            // texels between charts
+  resolution: 1024,      // texture size used to convert padding to UV units
+  maxDepth: 14,
+  dihedralWeight: 0.2,   // how much geometry (vs AI probability) steers automatic cuts
+};
+
+/** Heap of (key, id) with float keys. */
+class MinHeap {
+  constructor() { this.k = []; this.v = []; }
+  get size() { return this.k.length; }
+  push(key, val) {
+    const k = this.k, v = this.v; let i = k.length; k.push(key); v.push(val);
+    while (i > 0) { const p = (i - 1) >> 1; if (k[p] <= key) break; k[i] = k[p]; v[i] = v[p]; i = p; }
+    k[i] = key; v[i] = val;
+  }
+  pop() {
+    const k = this.k, v = this.v; const top = v[0], lastK = k.pop(), lastV = v.pop();
+    const n = k.length;
+    if (n) {
+      let i = 0;
+      for (;;) {
+        let c = 2 * i + 1; if (c >= n) break;
+        if (c + 1 < n && k[c + 1] < k[c]) c++;
+        if (k[c] >= lastK) break;
+        k[i] = k[c]; v[i] = v[c]; i = c;
+      }
+      k[i] = lastK; v[i] = lastV;
+    }
+    return top;
+  }
+  topKey() { return this.k[0]; }
+}
+
+/** Build initial seam set from probabilities and user overrides, then prune tiny fragments. */
+export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
+  const { nE, edgeV, boundary, nonManifold, nV, vEdgeStart, vEdges } = mesh;
+  const seam = new Uint8Array(nE);
+  for (let e = 0; e < nE; e++) {
+    let s = prob[e] >= params.threshold ? 1 : 0;
+    if (userSeam && userSeam[e]) s = userSeam[e] > 0 ? 1 : 0;
+    if (boundary[e] || nonManifold[e]) s = 1;
+    seam[e] = s;
+  }
+  // prune small connected seam fragments that are not user-forced and don't touch a boundary
+  const visited = new Uint8Array(nE);
+  const stack = [];
+  for (let e0 = 0; e0 < nE; e0++) {
+    if (!seam[e0] || visited[e0] || boundary[e0]) continue;
+    const comp = [];
+    let forced = false, touchesBoundary = false;
+    stack.push(e0); visited[e0] = 1;
+    while (stack.length) {
+      const e = stack.pop(); comp.push(e);
+      if (userSeam && userSeam[e] > 0) forced = true;
+      for (let s = 0; s < 2; s++) {
+        const v = edgeV[2 * e + s];
+        for (let i = vEdgeStart[v]; i < vEdgeStart[v + 1]; i++) {
+          const o = vEdges[i];
+          if (!seam[o] || visited[o]) continue;
+          if (boundary[o] || nonManifold[o]) { touchesBoundary = true; continue; }
+          visited[o] = 1; stack.push(o);
+        }
+      }
+    }
+    if (!forced && !touchesBoundary && comp.length < params.minFragment) for (const e of comp) seam[e] = 0;
+  }
+  return seam;
+}
+
+/** Faces connected through non-seam edges -> list of face arrays. */
+function componentsOf(mesh, faceList, seam, inSet) {
+  const { edgeF, faceEdges } = mesh;
+  for (const f of faceList) inSet[f] = 1;
+  const seen = new Map();
+  const comps = [];
+  for (const f0 of faceList) {
+    if (seen.has(f0)) continue;
+    const comp = [f0]; seen.set(f0, 1);
+    for (let qi = 0; qi < comp.length; qi++) {
+      const f = comp[qi];
+      for (let k = 0; k < 3; k++) {
+        const e = faceEdges[3 * f + k];
+        if (seam[e]) continue;
+        const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+        if (g < 0 || !inSet[g] || seen.has(g)) continue;
+        seen.set(g, 1); comp.push(g);
+      }
+    }
+    comps.push(comp);
+  }
+  for (const f of faceList) inSet[f] = 0;
+  return comps;
+}
+
+/** Local vertices of a chart: corners glued across non-seam edges. */
+function buildWedges(mesh, faces, seam, faceLocal) {
+  const { edgeV, edgeF, faceEdges, faces: F, pos } = mesh;
+  const nf = faces.length;
+  for (let i = 0; i < nf; i++) faceLocal[faces[i]] = i;
+  const uf = new UnionFind(3 * nf);
+  for (let i = 0; i < nf; i++) {
+    const f = faces[i];
+    for (let k = 0; k < 3; k++) {
+      const e = faceEdges[3 * f + k];
+      if (seam[e]) continue;
+      const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+      if (g < 0 || faceLocal[g] < 0) continue;
+      const j = faceLocal[g];
+      for (let s = 0; s < 2; s++) {
+        const v = edgeV[2 * e + s];
+        const ci = F[3 * f] === v ? 0 : F[3 * f + 1] === v ? 1 : 2;
+        const cj = F[3 * g] === v ? 0 : F[3 * g + 1] === v ? 1 : 2;
+        uf.union(3 * i + ci, 3 * j + cj);
+      }
+    }
+  }
+  const rootId = new Map();
+  const T = new Int32Array(3 * nf);
+  const P = [];
+  const vert = [];
+  for (let c = 0; c < 3 * nf; c++) {
+    const r = uf.find(c);
+    let id = rootId.get(r);
+    if (id === undefined) {
+      id = vert.length; rootId.set(r, id);
+      const v = F[3 * faces[Math.floor(c / 3)] + (c % 3)];
+      vert.push(v); P.push(pos[3 * v], pos[3 * v + 1], pos[3 * v + 2]);
+    }
+    T[c] = id;
+  }
+  // wedge edges & boundary
+  const eMap = new Map();
+  const nv = vert.length;
+  for (let i = 0; i < nf; i++) for (let k = 0; k < 3; k++) {
+    const a = T[3 * i + k], b = T[3 * i + (k + 1) % 3];
+    const key = a < b ? a * nv + b : b * nv + a;
+    eMap.set(key, (eMap.get(key) || 0) + 1);
+  }
+  const bVerts = new Set();
+  for (const [key, cnt] of eMap) if (cnt === 1) { bVerts.add(Math.floor(key / nv)); bVerts.add(key % nv); }
+  for (let i = 0; i < nf; i++) faceLocal[faces[i]] = -1;
+  const chi = nv - eMap.size + nf;
+  const bEdges = [];
+  for (const [key, cnt] of eMap) if (cnt === 1) bEdges.push(Math.floor(key / nv), key % nv);
+  return { P: Float64Array.from(P), T, vert, chi, boundaryVerts: [...bVerts], bEdges };
+}
+
+function farthestPins(P, cand) {
+  const d2 = (a, b) => (P[3 * a] - P[3 * b]) ** 2 + (P[3 * a + 1] - P[3 * b + 1]) ** 2 + (P[3 * a + 2] - P[3 * b + 2]) ** 2;
+  let a = cand[0], b = a, best = -1;
+  for (const c of cand) { const d = d2(a, c); if (d > best) { best = d; b = c; } }
+  best = -1; let c2 = b;
+  for (const c of cand) { const d = d2(b, c); if (d > best) { best = d; c2 = c; } }
+  if (c2 === b) c2 = cand.find(x => x !== b) ?? (b === 0 ? 1 : 0);
+  return [b, c2];
+}
+
+/** Dijkstra over face centroids inside a chart; returns farthest face from start. */
+function farthestFace(mesh, faces, start, faceLocal, centroid) {
+  const { edgeF, faceEdges } = mesh;
+  for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = i;
+  const dist = new Float64Array(faces.length).fill(Infinity);
+  const h = new MinHeap();
+  dist[faceLocal[start]] = 0; h.push(0, start);
+  let far = start, farD = 0;
+  while (h.size) {
+    const d = h.topKey(); const f = h.pop();
+    const li = faceLocal[f];
+    if (d > dist[li]) continue;
+    if (d > farD) { farD = d; far = f; }
+    for (let k = 0; k < 3; k++) {
+      const e = faceEdges[3 * f + k];
+      const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+      if (g < 0 || faceLocal[g] < 0) continue;
+      const nd = d + Math.hypot(centroid[3 * f] - centroid[3 * g], centroid[3 * f + 1] - centroid[3 * g + 1], centroid[3 * f + 2] - centroid[3 * g + 2]);
+      const lj = faceLocal[g];
+      if (nd < dist[lj]) { dist[lj] = nd; h.push(nd, g); }
+    }
+  }
+  for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = -1;
+  return far;
+}
+
+/** Mesh edge between mesh vertices a and b (or -1). */
+function meshEdge(mesh, a, b) {
+  const { vEdgeStart, vEdges, edgeV } = mesh;
+  for (let i = vEdgeStart[a]; i < vEdgeStart[a + 1]; i++) {
+    const e = vEdges[i];
+    if (edgeV[2 * e] === b || edgeV[2 * e + 1] === b) return e;
+  }
+  return -1;
+}
+
+/**
+ * A chart with several boundary loops (holes, or seam fragments ending inside the chart) is
+ * made disk-like by cutting the cheapest seam-like path from one loop to another.
+ * Returns the mesh edges of the path, or null when the chart has a single boundary loop.
+ */
+function connectBoundaryLoops(mesh, W, cost) {
+  const nv = W.vert.length;
+  const uf = new UnionFind(nv);
+  const onB = new Uint8Array(nv);
+  for (let i = 0; i < W.bEdges.length; i += 2) { uf.union(W.bEdges[i], W.bEdges[i + 1]); onB[W.bEdges[i]] = 1; onB[W.bEdges[i + 1]] = 1; }
+  const loopOf = new Int32Array(nv).fill(-1);
+  const loops = new Map();
+  for (let v = 0; v < nv; v++) if (onB[v]) { const r = uf.find(v); if (!loops.has(r)) loops.set(r, loops.size); loopOf[v] = loops.get(r); }
+  if (loops.size < 2) return null;
+  // the outer loop is the longest one; start from the smallest other loop
+  const loopLen = new Float64Array(loops.size);
+  for (let i = 0; i < W.bEdges.length; i += 2) {
+    const a = W.bEdges[i], b = W.bEdges[i + 1];
+    loopLen[loopOf[a]] += Math.hypot(W.P[3 * a] - W.P[3 * b], W.P[3 * a + 1] - W.P[3 * b + 1], W.P[3 * a + 2] - W.P[3 * b + 2]);
+  }
+  let src = 0;
+  for (let l = 1; l < loops.size; l++) if (loopLen[l] < loopLen[src]) src = l;
+  // wedge adjacency through interior edges
+  const adj = Array.from({ length: nv }, () => []);
+  const T = W.T;
+  for (let t = 0; t < T.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = T[t + k], b = T[t + (k + 1) % 3];
+    adj[a].push(b); adj[b].push(a);
+  }
+  const dist = new Float64Array(nv).fill(Infinity), prev = new Int32Array(nv).fill(-1);
+  const h = new MinHeap();
+  for (let v = 0; v < nv; v++) if (loopOf[v] === src) { dist[v] = 0; h.push(0, v); }
+  let target = -1;
+  while (h.size) {
+    const d = h.topKey(), v = h.pop();
+    if (d > dist[v]) continue;
+    if (loopOf[v] >= 0 && loopOf[v] !== src) { target = v; break; }
+    for (const w of adj[v]) {
+      const e = meshEdge(mesh, W.vert[v], W.vert[w]);
+      if (e < 0) continue;
+      const len = mesh.edgeLen[e] / mesh.meanEdgeLen;
+      const nd = d + len * (0.08 + Math.max(0, 1 - cost[e]) ** 2);
+      if (nd < dist[w]) { dist[w] = nd; prev[w] = v; h.push(nd, w); }
+    }
+  }
+  if (target < 0) return null;
+  const path = [];
+  for (let v = target; prev[v] >= 0; v = prev[v]) {
+    const e = meshEdge(mesh, W.vert[v], W.vert[prev[v]]);
+    if (e >= 0) path.push(e);
+  }
+  return path.length ? path : null;
+}
+
+/**
+ * Split a chart in two with a watershed flood from two far-apart seeds. Crossing an edge costs
+ * its seam likelihood, so the meeting front settles on the most seam-like edges.
+ */
+function splitChart(mesh, faces, cost, seam, faceLocal, centroid) {
+  const { edgeF, faceEdges, diag } = mesh;
+  const a = farthestFace(mesh, faces, faces[0], faceLocal, centroid);
+  const b = farthestFace(mesh, faces, a, faceLocal, centroid);
+  if (a === b) return null;
+  for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = i;
+  const label = new Int8Array(faces.length).fill(-1);
+  const h = new MinHeap();
+  const LEVELS = 48;
+  const push = (f, lab, level, dist) => h.push(level * 1e4 + dist / diag, f * 2 + lab);
+  const level = new Float64Array(faces.length);
+  const dist = new Float64Array(faces.length);
+  push(a, 0, 0, 0); push(b, 1, 0, 0);
+  const pendingLevel = new Map(), pendingDist = new Map();
+  pendingLevel.set(a * 2, 0); pendingDist.set(a * 2, 0);
+  pendingLevel.set(b * 2 + 1, 0); pendingDist.set(b * 2 + 1, 0);
+  while (h.size) {
+    const item = h.pop();
+    const f = item >> 1, lab = item & 1;
+    const li = faceLocal[f];
+    if (label[li] >= 0) continue;
+    label[li] = lab;
+    const lv = pendingLevel.get(item), ds = pendingDist.get(item);
+    level[li] = lv; dist[li] = ds;
+    for (let k = 0; k < 3; k++) {
+      const e = faceEdges[3 * f + k];
+      const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+      if (g < 0 || faceLocal[g] < 0 || label[faceLocal[g]] >= 0) continue;
+      const c = seam[e] ? LEVELS : Math.round(cost[e] * LEVELS);
+      const nl = Math.max(lv, c);
+      const nd = ds + Math.hypot(centroid[3 * f] - centroid[3 * g], centroid[3 * f + 1] - centroid[3 * g + 1], centroid[3 * f + 2] - centroid[3 * g + 2]);
+      const key = g * 2 + lab;
+      const old = pendingLevel.get(key);
+      if (old === undefined || nl < old || (nl === old && nd < pendingDist.get(key))) {
+        pendingLevel.set(key, nl); pendingDist.set(key, nd);
+        push(g, lab, nl, nd);
+      }
+    }
+  }
+  // smooth the cut: a face whose neighbours mostly belong to the other side switches sides,
+  // which removes the zig-zag a flood leaves on evenly tessellated surfaces
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = 0;
+    for (let i = 0; i < faces.length; i++) {
+      const f = faces[i];
+      if (f === a || f === b) continue;
+      let other = 0, same = 0;
+      for (let k = 0; k < 3; k++) {
+        const e = faceEdges[3 * f + k];
+        const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+        if (g < 0 || faceLocal[g] < 0 || seam[e]) continue;
+        if (label[faceLocal[g]] === label[i]) same++; else if (cost[e] < 0.9) other++;
+      }
+      if (other >= 2 && same <= 1) { label[i] = 1 - label[i]; changed++; }
+    }
+    if (!changed) break;
+  }
+  const newSeams = [];
+  for (let i = 0; i < faces.length; i++) {
+    const f = faces[i];
+    for (let k = 0; k < 3; k++) {
+      const e = faceEdges[3 * f + k];
+      const g = edgeF[2 * e] === f ? edgeF[2 * e + 1] : edgeF[2 * e];
+      if (g < 0 || faceLocal[g] < 0) continue;
+      if (label[faceLocal[g]] !== label[i] && !seam[e]) { seam[e] = 1; newSeams.push(e); }
+    }
+  }
+  for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = -1;
+  return newSeams;
+}
+
+/**
+ * Main entry. Returns per-corner UVs in [0,1], chart id per face, final seams and stats.
+ * @param {(stage:string, frac:number)=>void} onProgress
+ */
+export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onProgress = () => {}) {
+  const params = { ...DEFAULT_PARAMS, ...paramsIn };
+  const { nF, nE, faces: F, pos } = mesh;
+  const seam = seamsFromProbabilities(mesh, prob, params, userSeam);
+  const cost = new Float64Array(nE);
+  for (let e = 0; e < nE; e++) {
+    let c = (1 - params.dihedralWeight) * prob[e] + params.dihedralWeight * Math.min(1, dihedral[e] * 2);
+    if (userSeam && userSeam[e] < 0) c = 0; // user said "never cut here": flood crosses it freely
+    cost[e] = c;
+  }
+  const centroid = new Float64Array(3 * nF);
+  for (let f = 0; f < nF; f++) for (let k = 0; k < 3; k++) {
+    centroid[3 * f + k] = (pos[3 * F[3 * f] + k] + pos[3 * F[3 * f + 1] + k] + pos[3 * F[3 * f + 2] + k]) / 3;
+  }
+  const faceLocal = new Int32Array(nF).fill(-1);
+  const inSet = new Uint8Array(nF);
+  const all = Array.from({ length: nF }, (_, i) => i);
+  const queue = componentsOf(mesh, all, seam, inSet).map(c => ({ faces: c, depth: 0 }));
+  const charts = [];
+  let processedFaces = 0;
+  let autoCuts = 0;
+
+  while (queue.length) {
+    const { faces, depth } = queue.pop();
+    const W = buildWedges(mesh, faces, seam, faceLocal);
+    let ok = W.chi === 1 && W.boundaryVerts.length >= 2;
+    let res = null, dist = null;
+    if (ok) {
+      const pins = farthestPins(W.P, W.boundaryVerts);
+      res = lscm(W.P, W.T, pins);
+      dist = chartDistortion(W.P, W.T, res.uv);
+      if (dist.mirrored) for (let i = 0; i < res.uv.length; i += 2) res.uv[i] = -res.uv[i];
+      if (!isFinite(dist.distortion)) ok = false;
+      else if ((dist.distortion > params.maxDistortion || dist.flipFrac > 0.002) && faces.length >= 6 && depth < params.maxDepth) ok = false;
+    }
+    // topology problems (not a disk) are always cut further: every split strictly shrinks the chart,
+    // so this terminates; distortion-driven splits are limited by maxDepth
+    const topoBad = !(W.chi === 1 && W.boundaryVerts.length >= 2);
+    if (topoBad && W.chi < 1 && W.bEdges.length) {
+      const path = connectBoundaryLoops(mesh, W, cost);
+      if (path) {
+        let added = 0;
+        for (const e of path) if (!seam[e]) { seam[e] = 1; added++; }
+        if (added) {
+          autoCuts += added;
+          for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth });
+          continue;
+        }
+      }
+    }
+    if (!ok && faces.length > 1 && (topoBad || depth < params.maxDepth)) {
+      // NOTE: the flood barrier is the seam *likelihood*: high cost = good place for a seam
+      const cut = splitChart(mesh, faces, cost, seam, faceLocal, centroid);
+      if (cut && cut.length) {
+        for (const e of cut) seam[e] = 1;
+        autoCuts += cut.length;
+        for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth: depth + 1 });
+        continue;
+      }
+    }
+    if (!res) {
+      // last resort (e.g. a closed piece that could not be cut): planar projection
+      const pins = W.boundaryVerts.length >= 2 ? farthestPins(W.P, W.boundaryVerts) : [0, Math.min(1, W.vert.length - 1)];
+      res = lscm(W.P, W.T, pins, { maxIter: 0 });
+      dist = chartDistortion(W.P, W.T, res.uv);
+      if (dist.mirrored) for (let i = 0; i < res.uv.length; i += 2) res.uv[i] = -res.uv[i];
+    }
+    charts.push({ faces, T: W.T, uv: res.uv, area3d: dist.area3d, area2d: dist.area2d, distortion: dist.distortion, flips: dist.flips });
+    processedFaces += faces.length;
+    onProgress('unwrap', processedFaces / nF);
+  }
+
+  onProgress('pack', 0);
+  const packed = packCharts(charts, params);
+  const cornerUV = new Float32Array(6 * nF);
+  const faceChart = new Int32Array(nF);
+  let distSum = 0, areaSum = 0, flips = 0;
+  charts.forEach((c, ci) => {
+    const uv = packed.uvs[ci];
+    for (let i = 0; i < c.faces.length; i++) {
+      const f = c.faces[i];
+      faceChart[f] = ci;
+      for (let k = 0; k < 3; k++) {
+        const w = c.T[3 * i + k];
+        cornerUV[6 * f + 2 * k] = uv[2 * w];
+        cornerUV[6 * f + 2 * k + 1] = uv[2 * w + 1];
+      }
+    }
+    distSum += c.distortion * c.area3d; areaSum += c.area3d; flips += c.flips;
+  });
+  return {
+    cornerUV, faceChart, seam, chartCount: charts.length,
+    stats: {
+      charts: charts.length,
+      seamEdges: seam.reduce((s, x, e) => s + (x && !mesh.boundary[e] ? 1 : 0), 0),
+      autoCuts,
+      distortion: distSum / (areaSum || 1),
+      flips,
+      packingEfficiency: packed.efficiency,
+    },
+  };
+}

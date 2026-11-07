@@ -1,0 +1,670 @@
+{
+ "ABeautifulGame": {
+  "name": "A Beautiful Game",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ABeautifulGame",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Original model",
+    "artist": "MaterialX Project",
+    "owner": "ASWF",
+    "year": "2020",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC-BY-4.0",
+    "what": "Conversion to glTF",
+    "artist": "Ed Mackey",
+    "owner": "Ed Mackey",
+    "year": "2022",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "AnisotropyBarnLamp": {
+  "name": "Anisotropy Barn Lamp",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/AnisotropyBarnLamp",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Eric Chadwick",
+    "owner": "Copyright 2023 Wayfair, LLC",
+    "year": "2023",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "AntiqueCamera": {
+  "name": "Antique Camera",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/AntiqueCamera",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Maximillan Kamps",
+    "owner": "UX3D",
+    "year": "2018",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-UX3D",
+    "what": "UX3D logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "UX3D",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-UX3D.txt"
+   }
+  ]
+ },
+ "Avocado": {
+  "name": "Avocado",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Avocado",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Microsoft",
+    "owner": "Public",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "BarramundiFish": {
+  "name": "Barramundi Fish",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BarramundiFish",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Microsoft",
+    "owner": "Public",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "BoomBox": {
+  "name": "Boom Box",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BoomBox",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Microsoft",
+    "owner": "Public",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "BrainStem": {
+  "name": "BrainStem",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BrainStem",
+  "legal": [
+   {
+    "license": "LicenseRef-Poser-EULA",
+    "what": "Everything",
+    "artist": "Keith Hunter",
+    "owner": "Smith Micro Software, Inc.",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-Poser-EULA.txt"
+   }
+  ]
+ },
+ "CarConcept": {
+  "name": "Car Concept",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model and textures",
+    "artist": "Eric Chadwick",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2024",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "Khronos logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "3D Commerce logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   }
+  ]
+ },
+ "CesiumMan": {
+  "name": "Cesium Man",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Cesium",
+    "owner": "Cesium",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Cesium",
+    "what": "Cesium logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Cesium",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Cesium.txt"
+   }
+  ]
+ },
+ "CesiumMilkTruck": {
+  "name": "Cesium Milk Truck",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMilkTruck",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Cesium",
+    "owner": "Cesium",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Cesium",
+    "what": "Cesium logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Cesium",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Cesium.txt"
+   }
+  ]
+ },
+ "ChairDamaskPurplegold": {
+  "name": "Chair Damask Purplegold",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ChairDamaskPurplegold",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Models and Textures",
+    "artist": "Eric Chadwick",
+    "owner": "Wayfair",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "ChronographWatch": {
+  "name": "Chronograph Watch",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ChronographWatch",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model and textures",
+    "artist": "Eric Chadwick",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2025",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "Khronos logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "3D Commerce logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   },
+   {
+    "license": "LicenseRef-LegalMark-DGG",
+    "what": "DGG logo",
+    "artist": "Copyrightable logo",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2020",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-DGG.txt"
+   }
+  ]
+ },
+ "CommercialRefrigerator": {
+  "name": "Commercial Refrigerator",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CommercialRefrigerator",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model and textures and all images in the README.md",
+    "artist": "Eric Chadwick",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2025",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC-BY-4.0",
+    "what": "This work is based on 'Commercial Fridge' (https://sketchfab.com/3d-models/commercial-fridge-2174e1e4f1f24f1a95aa110ee060f473) by Sean Thomas (https://sketchfab.com/foon.) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+    "artist": "Sean Thomas",
+    "owner": "Sean Thomas",
+    "year": "2025",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "Corset": {
+  "name": "Corset",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Corset",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Microsoft",
+    "owner": "UX3D",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "DamagedHelmet": {
+  "name": "Damaged Helmet",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/DamagedHelmet",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Rebuild and conversion to glTF",
+    "artist": "ctxwing",
+    "owner": "ctxwing",
+    "year": "2018",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC-BY-NC-4.0",
+    "what": "Earlier version of model",
+    "artist": "theblueturtle_",
+    "owner": "theblueturtle_",
+    "year": "2016",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc/4.0/legalcode"
+   }
+  ]
+ },
+ "DiffuseTransmissionTeacup": {
+  "name": "Diffuse Transmission Teacup",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/DiffuseTransmissionTeacup",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Models and Textures",
+    "artist": "Polyhaven.com, and Eric Chadwick",
+    "owner": "Public domain",
+    "year": "2023",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "DragonAttenuation": {
+  "name": "Dragon Attenuation",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/DragonAttenuation",
+  "legal": [
+   {
+    "license": "LicenseRef-Stanford-Graphics",
+    "what": "Original dragon model",
+    "artist": "Stanford University Computer Graphics Laboratory",
+    "owner": "Stanford University Computer Graphics Laboratory",
+    "year": "1996",
+    "licenseUrl": "../../LICENSES/LicenseRef-Stanford-Graphics.txt"
+   },
+   {
+    "license": "LicenseRef-Stanford-Graphics",
+    "what": "Conversion and clean up",
+    "artist": "Morgan McGuire's Computer Graphics Archive",
+    "owner": "Morgan McGuire",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-Stanford-Graphics.txt"
+   },
+   {
+    "license": "CC0-1.0",
+    "what": "Cloth backdrop",
+    "artist": "Adobe",
+    "owner": "Public",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "Duck": {
+  "name": "Duck",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Duck",
+  "legal": [
+   {
+    "license": "SCEA",
+    "what": "Everything",
+    "artist": "Sony",
+    "owner": "Sony",
+    "year": "2006",
+    "licenseUrl": "../../LICENSES/SCEA.txt"
+   }
+  ]
+ },
+ "Fox": {
+  "name": "Fox",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Model",
+    "artist": "PixelMannen",
+    "owner": "Public",
+    "year": "2014",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   },
+   {
+    "license": "CC-BY-4.0",
+    "what": "Rigging & Animation",
+    "artist": "tomkranis",
+    "owner": "tomkranis",
+    "year": "2014",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC-BY-4.0",
+    "what": "Conversion to glTF",
+    "artist": "@AsoboStudio and @scurest",
+    "owner": "@AsoboStudio and @scurest",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "GlamVelvetSofa": {
+  "name": "GlamVelvetSofa",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/GlamVelvetSofa",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Eric Chadwick",
+    "owner": "Wayfair, LLC",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "GlassHurricaneCandleHolder": {
+  "name": "Glass Hurricane Candle Holder",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/GlassHurricaneCandleHolder",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model and textures",
+    "artist": "Eric Chadwick",
+    "owner": "Wayfair, LLC",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "Khronos logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "glTF logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   }
+  ]
+ },
+ "IridescenceSuzanne": {
+  "name": "Iridescence Suzanne",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/IridescenceSuzanne",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Initial version",
+    "artist": "Mathias Kanzler",
+    "owner": "UX3D",
+    "year": "2022",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   },
+   {
+    "license": "CC0-1.0",
+    "what": "Internal clean-up",
+    "artist": "Pascal Schoen",
+    "owner": "Pascal Schoen",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "IridescentDishWithOlives": {
+  "name": "Iridescent Dish with Olives",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/IridescentDishWithOlives",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Eric Chadwick",
+    "owner": "Wayfair, LLC",
+    "year": "2020",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "Lantern": {
+  "name": "Lantern",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Lantern",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Initial version",
+    "artist": "sbtron",
+    "owner": "Microsoft",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   },
+   {
+    "license": "CC0-1.0",
+    "what": "Draco compression",
+    "artist": "Frank Galligan",
+    "owner": "Frank Galligan",
+    "year": "2018",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "LightsPunctualLamp": {
+  "name": "Lamp with Punctual Lights",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/LightsPunctualLamp",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "DGG",
+    "owner": "DGG",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "MaterialsVariantsShoe": {
+  "name": "Materials Variants Shoe",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everthing",
+    "artist": "Shopify",
+    "owner": "Shopify",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "MosquitoInAmber": {
+  "name": "Mosquito In Amber",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MosquitoInAmber",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model",
+    "artist": "Loic Norgeot",
+    "owner": "Sketchfab",
+    "year": "2018",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC-BY-4.0",
+    "what": "Real-time refraction",
+    "artist": "Sketchfab",
+    "owner": "Sketchfab",
+    "year": "2019",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "PotOfCoals": {
+  "name": "PotOfCoals",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/PotOfCoals",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Model and textures",
+    "artist": "Eric Chadwick",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2023",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "Khronos logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2015",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   },
+   {
+    "license": "LicenseRef-LegalMark-Khronos",
+    "what": "glTF logo",
+    "artist": "Non-copyrightable logo",
+    "owner": "Khronos Group",
+    "year": "2017",
+    "licenseUrl": "../../LICENSES/LicenseRef-LegalMark-Khronos.txt"
+   }
+  ]
+ },
+ "RiggedFigure": {
+  "name": "Rigged Figure",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/RiggedFigure",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Everything",
+    "artist": "Cesium",
+    "owner": "Cesium",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   }
+  ]
+ },
+ "ScatteringSkull": {
+  "name": "Skull",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ScatteringSkull",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Vladimir Petkovic",
+    "owner": "Public",
+    "year": "2025",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "SheenChair": {
+  "name": "Sheen Chair",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenChair",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Eric Chadwick",
+    "owner": "Wayfair, LLC",
+    "year": "2020",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "SheenWoodLeatherSofa": {
+  "name": "Sheen Wood Leather Sofa",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenWoodLeatherSofa",
+  "legal": [
+   {
+    "license": "CC-BY-4.0",
+    "what": "Improvements",
+    "artist": "Eric Chadwick",
+    "owner": "Darmstadt Graphics Group GmbH",
+    "year": "2024",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/legalcode"
+   },
+   {
+    "license": "CC0-1.0",
+    "what": "Original asset",
+    "artist": "Fran Calvente",
+    "owner": "Public domain",
+    "year": "2021",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "ToyCar": {
+  "name": "Toy Car",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ToyCar",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Initial car model",
+    "artist": "Guido Odendahl",
+    "owner": "Public",
+    "year": "2020",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   },
+   {
+    "license": "CC0-1.0",
+    "what": "Extensions and scene composition",
+    "artist": "Eric Chadwick",
+    "owner": "Public",
+    "year": "2020",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ },
+ "WaterBottle": {
+  "name": "Water Bottle",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/WaterBottle",
+  "legal": [
+   {
+    "license": "CC0-1.0",
+    "what": "Everything",
+    "artist": "Microsoft",
+    "owner": "Public",
+    "year": "2017",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+   }
+  ]
+ }
+}

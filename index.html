@@ -1,0 +1,205 @@
+<title>Seamline UV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<style>
+/* Layout: workshop bench — control rail on the left, 3D model and its flattened UV sheet side by side, a mono readout strip underneath. */
+:root {
+  --bg: #eceff3;          /* drafting-table grey with a blue cast */
+  --panel: #f8f9fb;
+  --ink: #18202c;
+  --muted: #5d6878;
+  --line: #d3d9e1;
+  --accent: #2357d6;      /* cobalt: UI actions */
+  --accent-ink: #ffffff;
+  --seam: #e0245e;        /* seam red, the colour 3D artists expect seams to be */
+  --view: #dfe4ea;
+  --good: #1f8a4c; --warn: #b7791f;
+  --f-display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --panel: #191e27; --ink: #e6ebf2; --muted: #95a1b2; --line: #2a313d;
+  --accent: #6f97ff; --accent-ink: #0b1020; --seam: #ff4d82; --view: #0d1117; --good: #4cc483; --warn: #e2a84b;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #191e27; --ink: #e6ebf2; --muted: #95a1b2; --line: #2a313d;
+  --accent: #6f97ff; --accent-ink: #0b1020; --seam: #ff4d82; --view: #0d1117; --good: #4cc483; --warn: #e2a84b;
+  color-scheme: dark; }
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 13.5px; line-height: 1.5; }
+.app { height: 100%; display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+aside { grid-row: 1 / 3; border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto;
+  padding-block: 18px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: flex; flex-direction: column; gap: 18px; }
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand h1 { font-family: var(--f-display); font-size: 20px; margin: 0; letter-spacing: .01em; }
+.brand span { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.lede { margin: -10px 0 0; color: var(--muted); font-size: 12.5px; }
+section.step { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.step h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.step h2 b { font-family: var(--f-mono); font-weight: 500; color: var(--accent); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 1 1 auto; }
+button, select, .filebtn { font: inherit; font-size: 13px; border-radius: var(--r); border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  padding: 7px 10px; cursor: pointer; text-align: center; }
+button:hover, .filebtn:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible, .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.toggle[aria-pressed="true"] { background: var(--seam); border-color: var(--seam); color: #fff; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebtn { position: relative; display: inline-block; }
+label.slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 12.5px; }
+label.slider input { grid-column: 1 / 3; width: 100%; accent-color: var(--accent); }
+label.slider output { font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.metric { font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.metric dt { color: var(--muted); } .metric dd { margin: 0; text-align: right; }
+.pill { display: inline-block; font-family: var(--f-mono); font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--good); border-color: var(--good); }
+progress { width: 100%; height: 6px; accent-color: var(--accent); }
+
+main { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; gap: 1px; background: var(--line); }
+.pane { position: relative; background: var(--view); min-height: 0; min-width: 0; overflow: hidden; }
+.pane canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.pane .bar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+.pane .bar > * { pointer-events: auto; }
+.pane .tag { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--muted); background: var(--panel); padding: 3px 8px; border-radius: var(--r); border: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--panel); }
+.seg button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; background: transparent; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.legend { position: absolute; left: 10px; bottom: 10px; font-family: var(--f-mono); font-size: 11px; color: var(--muted); background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; display: flex; align-items: center; gap: 8px; }
+.ramp { width: 90px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, #3b6fd9, #a7b3c4, #f2a33a, #e0245e); }
+.busy { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--view) 70%, transparent); font-family: var(--f-mono); font-size: 12px; }
+.drop { outline: 2px dashed var(--accent); outline-offset: -8px; }
+footer.readout { grid-column: 2; border-top: 1px solid var(--line); background: var(--panel); font-family: var(--f-mono); font-size: 12px;
+  font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 4px 22px; padding-block: 8px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+footer.readout span b { font-weight: 500; color: var(--ink); } footer.readout span { color: var(--muted); }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(52px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel);
+  padding: 8px 12px; border-radius: var(--r); font-size: 12.5px; max-width: 340px; z-index: 20; }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; height: auto; }
+  aside { grid-row: auto; border-right: 0; border-bottom: 1px solid var(--line); padding-right: max(16px, env(safe-area-inset-right, 0px)); overflow: visible; }
+  main { grid-template-columns: minmax(0, 1fr); grid-auto-rows: 62vh; }
+  footer.readout { grid-column: 1; padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<div class="app">
+  <aside>
+    <div>
+      <div class="brand"><h1>Seamline UV</h1><span>AI seam &amp; unwrap</span></div>
+    </div>
+    <p class="lede">学習モデルがシーム（切れ目）の位置を予測し、LSCMで展開してテクスチャ空間に詰め込みます。</p>
+
+    <section class="step" aria-labelledby="h-model">
+      <h2 id="h-model"><b>1</b>モデル</h2>
+      <div class="row">
+        <label class="filebtn">OBJ / GLB を開く<input id="file" type="file" accept=".obj,.glb,.gltf"></label>
+      </div>
+      <div class="row">
+        <select id="sample" aria-label="サンプルモデル">
+          <option value="mug">サンプル: マグカップ</option>
+          <option value="robot">サンプル: ロボット</option>
+          <option value="knot">サンプル: トーラスノット</option>
+          <option value="capsule">サンプル: カプセル</option>
+          <option value="sphere">サンプル: 球</option>
+        </select>
+      </div>
+      <p class="hint" id="modelInfo">ファイルを3Dビューへドロップしても開けます。</p>
+    </section>
+
+    <section class="step" aria-labelledby="h-ai">
+      <h2 id="h-ai"><b>2</b>AIシーム予測</h2>
+      <label class="slider">シームのしきい値 <output id="thrOut">0.50</output>
+        <input id="thr" type="range" min="0.05" max="0.95" step="0.01" value="0.5"></label>
+      <p class="hint">下げるほど切れ目が増え、歪みは減ります。</p>
+      <dl class="metric" id="evalBox" hidden></dl>
+    </section>
+
+    <section class="step" aria-labelledby="h-unwrap">
+      <h2 id="h-unwrap"><b>3</b>展開とパッキング</h2>
+      <label class="slider">許容する面積歪み <output id="distOut">1.25</output>
+        <input id="dist" type="range" min="1.05" max="2.5" step="0.01" value="1.25"></label>
+      <div class="row">
+        <label class="slider" style="grid-template-columns:1fr">パディング(px)
+          <select id="pad"><option>2</option><option selected>4</option><option>8</option><option>16</option></select></label>
+        <label class="slider" style="grid-template-columns:1fr">テクスチャ
+          <select id="res"><option>512</option><option selected>1024</option><option>2048</option><option>4096</option></select></label>
+      </div>
+      <button class="primary" id="run">UV展開を実行</button>
+      <div class="row">
+        <button class="toggle" id="edit" aria-pressed="false">シームを手で編集</button>
+        <button id="clearEdits">編集を消去</button>
+      </div>
+      <p class="hint" id="editHint">編集中は3Dビューのエッジをクリックすると切る／つなぐを切り替えます。変更後は自動で再展開します。</p>
+    </section>
+
+    <section class="step" aria-labelledby="h-learn">
+      <h2 id="h-learn"><b>4</b>学習 <span class="pill" id="modelState">ベースモデル</span></h2>
+      <button id="learnUV" disabled>このモデルの元UVから学習</button>
+      <button id="learnSeams" disabled>現在のシームを正解として学習</button>
+      <progress id="trainProg" max="1" value="0" hidden></progress>
+      <p class="hint" id="trainInfo">手作業でUV展開済みのモデルを読み込むと、その切れ目の付け方を学習します。学習結果はこのブラウザに保存されます。</p>
+      <div class="row">
+        <button id="saveW">モデルを保存</button>
+        <label class="filebtn">読み込む<input id="loadW" type="file" accept=".json"></label>
+        <button id="resetW">初期化</button>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="h-export">
+      <h2 id="h-export"><b>5</b>書き出し</h2>
+      <div class="row">
+        <button id="expObj" disabled>OBJ</button>
+        <button id="expGlb" disabled>GLB</button>
+        <button id="expPng" disabled>UV図 PNG</button>
+      </div>
+    </section>
+  </aside>
+
+  <main>
+    <div class="pane" id="pane3d">
+      <canvas id="c3d" aria-label="3Dビュー"></canvas>
+      <div class="bar">
+        <span class="tag">3D</span>
+        <div class="seg" role="group" aria-label="表示">
+          <button data-mode="checker" aria-pressed="true">チェッカー</button>
+          <button data-mode="charts" aria-pressed="false">チャート</button>
+          <button data-mode="prob" aria-pressed="false">AI確率</button>
+          <button data-mode="orig" aria-pressed="false" hidden>元のUV</button>
+        </div>
+      </div>
+      <div class="legend" id="legend" hidden><span>シームらしさ</span><span>低</span><div class="ramp"></div><span>高</span></div>
+      <div class="busy" id="busy" hidden>処理中…</div>
+    </div>
+    <div class="pane" id="paneUV">
+      <canvas id="cuv" aria-label="UVビュー"></canvas>
+      <div class="bar"><span class="tag">UV 0–1</span><span class="tag" id="uvHint">ホイールで拡大・ドラッグで移動</span></div>
+    </div>
+  </main>
+
+  <footer class="readout" id="readout">
+    <span>面 <b id="sF">–</b></span><span>シーム <b id="sS">–</b></span><span>チャート <b id="sC">–</b></span>
+    <span>面積歪み <b id="sD">–</b></span><span>充填率 <b id="sP">–</b></span><span>処理 <b id="sT">–</b></span>
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="./src/app.js"></script>

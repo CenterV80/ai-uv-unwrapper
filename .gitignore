@@ -1,0 +1,4 @@
+node_modules/
+# Training assets are downloaded separately (see README); they are not redistributed.
+training/models/
+*.log
