@@ -184,7 +184,7 @@ export function computeMetrics(mesh, cornerUV, { overlapRes = 1024 } = {}) {
  * Exact P/R/F1, plus a tolerant version: an edge counts as matched if both endpoints lie within
  * `tolFrac` x bounding-box diagonal (geodesic, along mesh edges) of the other seam set.
  */
-export function seamAgreement(mesh, predSeam, labels, tolFrac = 0.01) {
+export function seamAgreement(mesh, predSeam, labels, tolFrac = 0.01, withClasses = false) {
   const { nE, nV, edgeV, edgeLen, vEdgeStart, vEdges, diag } = mesh;
   const tol = tolFrac * diag;
   const P = [], G = [];
@@ -218,5 +218,18 @@ export function seamAgreement(mesh, predSeam, labels, tolFrac = 0.01) {
   const precT = P.length ? P.filter(e => near(dG, e)).length / P.length : (G.length ? 0 : 1);
   const recT = G.length ? G.filter(e => near(dP, e)).length / G.length : 1;
   const f1 = (p, r) => (p + r) ? 2 * p * r / (p + r) : 0;
-  return { seamPrecision: prec, seamRecall: rec, seamF1: f1(prec, rec), seamPrecisionTol: precT, seamRecallTol: recT, seamF1Tol: f1(precT, recT), predSeams: P.length, refSeams: G.length };
+  const out = { seamPrecision: prec, seamRecall: rec, seamF1: f1(prec, rec), seamPrecisionTol: precT, seamRecallTol: recT, seamF1Tol: f1(precT, recT), predSeams: P.length, refSeams: G.length };
+  if (withClasses) {
+    // per edge: 1 = predicted seam near a reference seam (match), 2 = predicted, no reference nearby (extra),
+    //           3 = reference seam with no predicted seam nearby (missed), 0 = neither
+    const cls = new Uint8Array(nE);
+    for (const e of P) cls[e] = near(dG, e) ? 1 : 2;
+    for (const e of G) if (!near(dP, e) && !cls[e]) cls[e] = 3;
+    let lenP = 0, lenG = 0, lenMatch = 0, lenExtra = 0, lenMissed = 0;
+    for (const e of P) { lenP += edgeLen[e]; if (cls[e] === 1) lenMatch += edgeLen[e]; else lenExtra += edgeLen[e]; }
+    for (const e of G) { lenG += edgeLen[e]; if (!near(dP, e)) lenMissed += edgeLen[e]; }
+    out.classes = cls;
+    out.lengths = { pred: lenP, ref: lenG, match: lenMatch, extra: lenExtra, missed: lenMissed };
+  }
+  return out;
 }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>report renderer</title>
+<script type="importmap">{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }</script></head>
+<body style="margin:0;background:#fff">
+<script type="module">
+// Off-screen renderer used by tools/report/render.mjs (headless Chromium).
+import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+const W = 960, H = 480;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+document.body.appendChild(renderer.domElement);
+
+const COLORS = { ref: 0x1f2937, match: 0x2563eb, extra: 0xf59e0b, missed: 0xdc2626 };
+
+function lines(geo, edges, color, width) {
+  const p = new Float32Array(edges.length * 6);
+  edges.forEach((e, i) => {
+    const a = geo.edgeV[2 * e], b = geo.edgeV[2 * e + 1];
+    p.set([geo.pos[3 * a], geo.pos[3 * a + 1], geo.pos[3 * a + 2], geo.pos[3 * b], geo.pos[3 * b + 1], geo.pos[3 * b + 2]], 6 * i);
+  });
+  const g = new LineSegmentsGeometry(); g.setPositions(p);
+  const m = new LineMaterial({ color, linewidth: width, worldUnits: false });
+  m.resolution.set(W / 2, H);
+  return new LineSegments2(g, m);
+}
+
+/** layers: [{edges, kind}] ; returns a webp data URL with front and back views side by side */
+window.render3D = (geo, layers, view = {}) => {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xffffff);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(geo.pos, 3));
+  g.setIndex(geo.faces);
+  g.computeVertexNormals(); g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0xd9dde3, roughness: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1.5, polygonOffsetUnits: 2 }));
+  scene.add(mesh);
+  for (const l of layers) if (l.edges.length) scene.add(lines(geo, l.edges, COLORS[l.kind], l.kind === 'missed' ? 2.6 : 2.2));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a94a3, 1.8));
+  const d = new THREE.DirectionalLight(0xffffff, 1.2); scene.add(d);
+  const bs = g.boundingSphere;
+  const cam = new THREE.PerspectiveCamera(32, (W / 2) / H, bs.radius / 100, bs.radius * 20);
+  const dist = bs.radius / Math.sin((32 * Math.PI / 180) / 2) * 1.02;
+  renderer.setScissorTest(true);
+  const az = view.azimuth ?? 0.6;
+  [az, az + Math.PI].forEach((a, i) => {
+    const dir = new THREE.Vector3(Math.sin(a), 0.35, Math.cos(a)).normalize();
+    cam.position.copy(bs.center).addScaledVector(dir, dist); cam.lookAt(bs.center);
+    d.position.copy(cam.position).add(new THREE.Vector3(0, bs.radius, 0));
+    renderer.setViewport(i * W / 2, 0, W / 2, H); renderer.setScissor(i * W / 2, 0, W / 2, H);
+    renderer.render(scene, cam);
+  });
+  renderer.setScissorTest(false);
+  const url = renderer.domElement.toDataURL('image/webp', 0.86);
+  g.dispose();
+  return url;
+};
+
+/** UV layout: charts filled with distinct pastel colours, outlines in grey */
+window.renderUV = (uv, faceChart, size = 420) => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, size, size);
+  c.strokeStyle = '#c8ced6'; c.strokeRect(0.5, 0.5, size - 1, size - 1);
+  // fit layouts that leave [0,1] (artist tiling) into view
+  let x0 = 0, y0 = 0, x1 = 1, y1 = 1;
+  for (let i = 0; i < uv.length; i += 2) { x0 = Math.min(x0, uv[i]); x1 = Math.max(x1, uv[i]); y0 = Math.min(y0, uv[i + 1]); y1 = Math.max(y1, uv[i + 1]); }
+  const s = (size - 8) / Math.max(x1 - x0, y1 - y0);
+  const X = u => 4 + (u - x0) * s, Y = v => size - 4 - (v - y0) * s;
+  const nf = uv.length / 6;
+  const byChart = new Map();
+  for (let f = 0; f < nf; f++) { const k = faceChart ? faceChart[f] : 0; if (!byChart.has(k)) byChart.set(k, []); byChart.get(k).push(f); }
+  for (const [k, fs] of byChart) {
+    const h = (k * 137.508) % 360;
+    c.fillStyle = `hsl(${h} 55% 72%)`;
+    c.beginPath();
+    for (const f of fs) { c.moveTo(X(uv[6 * f]), Y(uv[6 * f + 1])); c.lineTo(X(uv[6 * f + 2]), Y(uv[6 * f + 3])); c.lineTo(X(uv[6 * f + 4]), Y(uv[6 * f + 5])); c.closePath(); }
+    c.fill();
+  }
+  return cv.toDataURL('image/webp', 0.86);
+};
+window.ready = true;
+</script></body></html>
