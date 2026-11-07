@@ -8,10 +8,11 @@
     "serve": "node serve.mjs",
     "build": "node build.mjs",
     "train": "node training/train.mjs",
-    "test": "node tests/unwrap-test.mjs BoomBox Fox CesiumMan WaterBottle && node tests/garments-test.mjs",
+    "test": "node tests/unwrap-test.mjs BoomBox Fox CesiumMan WaterBottle && node tests/garments-test.mjs && node tests/stats-test.mjs",
     "licenses": "node training/fetch-licenses.mjs",
     "setup:data": "node training/fetch-models.mjs && node training/fetch-licenses.mjs",
-    "bench": "node tools/bench.mjs"
+    "bench": "node tools/bench.mjs",
+    "stats": "node tools/stats.mjs"
   },
   "devDependencies": {
     "three": "0.160.0",
