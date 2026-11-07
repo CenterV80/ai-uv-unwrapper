@@ -39,6 +39,7 @@ export const METHODS = {
   /** the artist's own UV layout, measured as-is (reference, may tile or overlap on purpose) */
   artistUV(mesh, ctx) {
     if (!mesh.cornerUV) return { skip: 'no reference UVs' };
+    if (mesh.labelsOnly) return { skip: 'reference seams only (no artist layout)' };
     return { cornerUV: Float32Array.from(mesh.cornerUV) };
   },
   /** xatlas (MIT, WebAssembly build "xatlasjs") with default chart/pack options */

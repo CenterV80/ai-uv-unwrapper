@@ -53,7 +53,9 @@ function readOBJ(path) {
       }
     }
   }
-  return [{ name: basename(path), positions: Float32Array.from(V), indices: Uint32Array.from(idx), cornerUV: hasUV && cuv.length ? Float32Array.from(cuv) : null }];
+  // "labels-only" OBJs (tools/voxelize.mjs) carry reference seams in their texture coordinates, not a real layout
+  const labelsOnly = /^# seamline: labels-only/m.test(readFileSync(path, 'utf8').slice(0, 200));
+  return [{ name: basename(path), positions: Float32Array.from(V), indices: Uint32Array.from(idx), cornerUV: hasUV && cuv.length ? Float32Array.from(cuv) : null, labelsOnly }];
 }
 
 function meshStats(mesh) {
@@ -88,7 +90,10 @@ for (const file of files) {
     if (mesh.nF < 20 || mesh.nF > maxFaces) continue;
     const labels = inp.cornerUV ? seamsFromUV(mesh) : null;
     const ctx = { labels };
-    const base = { model, mesh: inp.name, split: trained.has(model) ? 'train' : 'unseen', faces: mesh.nF, ...meshStats(mesh) };
+    // derived meshes are named <sourceModel>__<mesh>__<variant>; the split follows the source model
+    const srcModel = model.split('__')[0];
+    if (inp.labelsOnly) mesh.labelsOnly = true;
+    const base = { model, mesh: inp.name, source: srcModel, split: trained.has(srcModel) ? 'train' : 'unseen', faces: mesh.nF, ...meshStats(mesh) };
     // Reference quality: seam metrics are only meaningful against a hand-made layout with real seams.
     // Auto-generated atlases (tiny charts) and single-island layouts are recorded but not scored.
     if (labels) {
