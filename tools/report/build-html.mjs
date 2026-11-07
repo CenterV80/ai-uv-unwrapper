@@ -92,11 +92,11 @@ td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-al
 .dom { display: inline-block; margin-left: 8px; font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
 .dom.voxel { border-color: var(--accent); color: var(--accent); }
 .case { display: flex; flex-direction: column; }
-.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .card { margin: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .card.ref { border-color: var(--ink); }
 .card img { width: 100%; height: auto; display: block; border-radius: 4px; background: #fff; }
-.card img.uv { width: 62%; align-self: center; border: 1px solid var(--line); }
+.card img.uv { width: 42%; align-self: center; border: 1px solid var(--line); }
 figcaption { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .who { font-weight: 600; margin-right: auto; }
 .pill { font-family: var(--f-mono); font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
@@ -111,8 +111,8 @@ pre { font-family: var(--f-mono); font-size: 12.5px; background: var(--bg); bord
 nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
 nav.toc a { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: 2px 12px; font-size: 13px; background: var(--paper); }
 nav.toc a:focus-visible, nav.toc a:hover { border-color: var(--accent); }
-@media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } dl.terms { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .card img.uv { width: 60%; } }
+@media (max-width: 560px) { dl.terms { grid-template-columns: 1fr; } }
 </style>
 <div class="wrap">
 <header>
