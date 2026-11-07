@@ -11,5 +11,8 @@
     "test": "node tests/unwrap-test.mjs BoomBox Fox CesiumMan WaterBottle",
     "licenses": "node training/fetch-licenses.mjs"
   },
-  "devDependencies": { "three": "0.160.0" }
+  "devDependencies": {
+    "three": "0.160.0",
+    "xatlasjs": "^0.2.0"
+  }
 }

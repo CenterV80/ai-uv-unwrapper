@@ -1,5 +1,16 @@
 // Procedural sample models (no bundled third-party assets). UVs are stripped so the tool makes its own.
+import { GARMENTS } from './garments.js';
+
+const GARMENT_LABELS = { tshirt: 'Tシャツ', pants: 'パンツ', skirt: 'スカート', beanie: 'ニット帽' };
+
 export function makeSample(key, THREE, mergeGeometries) {
+  if (GARMENTS[key]) {
+    const { positions, indices } = GARMENTS[key]();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    return { geometry, label: 'サンプル: ' + GARMENT_LABELS[key] };
+  }
   const clean = g => { g = g.index ? g : g; for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k); return g; };
   const merge = gs => mergeGeometries(gs.map(g => clean(g.index ? g : g)), false);
   let geometry, label;

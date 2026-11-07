@@ -2,15 +2,20 @@
 import { UnionFind } from './mesh.js';
 import { lscm, chartDistortion } from './lscm.js';
 import { packCharts } from './pack.js';
+import { rasterOverlap } from './metrics.js';
 
 export const DEFAULT_PARAMS = {
   threshold: 0.5,        // seam probability threshold
   maxDistortion: 1.25,   // area-distortion tolerance per chart (1 = perfect)
   minFragment: 3,        // seam fragments shorter than this many edges are dropped
+  extendRatio: 0.7,      // dangling seam ends may continue along edges with prob >= threshold * extendRatio
+  extendSteps: 0,        // ... for at most this many edges (0 = off; experimental gap closing, not validated)
   padding: 4,            // texels between charts
   resolution: 1024,      // texture size used to convert padding to UV units
   maxDepth: 14,
   dihedralWeight: 0.2,   // how much geometry (vs AI probability) steers automatic cuts
+  rejectOverlap: true,   // split charts whose UVs overlap themselves (LSCM does not prevent this)
+  overlapTolerance: 0.005, // ... when the overlapped share of the chart's UV area exceeds this (always reported by metrics)
 };
 
 /** Heap of (key, id) with float keys. */
@@ -50,6 +55,7 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
     if (boundary[e] || nonManifold[e]) s = 1;
     seam[e] = s;
   }
+  extendDanglingEnds(mesh, prob, seam, params, userSeam);
   // prune small connected seam fragments that are not user-forced and don't touch a boundary
   const visited = new Uint8Array(nE);
   const stack = [];
@@ -74,6 +80,49 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
     if (!forced && !touchesBoundary && comp.length < params.minFragment) for (const e of comp) seam[e] = 0;
   }
   return seam;
+}
+
+/**
+ * Hysteresis-style gap closing: from every dangling seam end, keep walking along the most
+ * seam-like straight-ish continuation while its probability stays above a lower threshold.
+ * Stops on reaching another seam or the mesh boundary; walks that reach nothing are undone.
+ */
+function extendDanglingEnds(mesh, prob, seam, params, userSeam) {
+  const { nV, edgeV, pos, vEdgeStart, vEdges } = mesh;
+  const low = params.threshold * (params.extendRatio ?? 0.7), maxSteps = params.extendSteps ?? 10;
+  if (!(maxSteps > 0)) return;
+  const deg = new Int32Array(nV);
+  for (let e = 0; e < mesh.nE; e++) if (seam[e]) { deg[edgeV[2 * e]]++; deg[edgeV[2 * e + 1]]++; }
+  const other = (e, v) => edgeV[2 * e] === v ? edgeV[2 * e + 1] : edgeV[2 * e];
+  for (let v0 = 0; v0 < nV; v0++) {
+    if (deg[v0] !== 1) continue;
+    let v = v0, prevE = -1;
+    for (let i = vEdgeStart[v]; i < vEdgeStart[v + 1]; i++) if (seam[vEdges[i]]) prevE = vEdges[i];
+    const path = [];
+    let reached = false;
+    for (let step = 0; step < maxSteps; step++) {
+      const u = other(prevE, v);
+      const dx = pos[3 * v] - pos[3 * u], dy = pos[3 * v + 1] - pos[3 * u + 1], dz = pos[3 * v + 2] - pos[3 * u + 2];
+      const dl = Math.hypot(dx, dy, dz) || 1;
+      let best = -1, bestP = low;
+      for (let i = vEdgeStart[v]; i < vEdgeStart[v + 1]; i++) {
+        const e = vEdges[i];
+        if (seam[e] || (userSeam && userSeam[e] < 0)) continue;
+        const w = other(e, v);
+        const ex = pos[3 * w] - pos[3 * v], ey = pos[3 * w + 1] - pos[3 * v + 1], ez = pos[3 * w + 2] - pos[3 * v + 2];
+        const cos = (dx * ex + dy * ey + dz * ez) / (dl * (Math.hypot(ex, ey, ez) || 1));
+        if (cos < 0.2) continue; // don't turn back or sideways
+        if (prob[e] >= bestP) { bestP = prob[e]; best = e; }
+      }
+      if (best < 0) break;
+      path.push(best); seam[best] = 1;
+      const w = other(best, v);
+      deg[v]++; deg[w]++;
+      if (deg[w] > 1) { reached = true; break; }
+      prevE = best; v = w;
+    }
+    if (!reached) for (const e of path) { seam[e] = 0; deg[edgeV[2 * e]]--; deg[edgeV[2 * e + 1]]--; }
+  }
 }
 
 /** Faces connected through non-seam edges -> list of face arrays. */
@@ -188,6 +237,19 @@ function farthestFace(mesh, faces, start, faceLocal, centroid) {
   }
   for (let i = 0; i < faces.length; i++) faceLocal[faces[i]] = -1;
   return far;
+}
+
+/** Does a chart's UV layout cover any spot twice? (raster test, resolution scales with size) */
+function chartSelfOverlaps(uv, T, tolerance) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < uv.length; i += 2) { x0 = Math.min(x0, uv[i]); x1 = Math.max(x1, uv[i]); y0 = Math.min(y0, uv[i + 1]); y1 = Math.max(y1, uv[i + 1]); }
+  const size = Math.max(x1 - x0, y1 - y0) || 1;
+  const nf = T.length / 3;
+  const res = Math.max(256, Math.min(1024, Math.round(Math.sqrt(nf) * 16)));
+  const tri = new Float64Array(6 * nf);
+  for (let f = 0; f < nf; f++) for (let k = 0; k < 3; k++) { tri[6 * f + 2 * k] = uv[2 * T[3 * f + k]]; tri[6 * f + 2 * k + 1] = uv[2 * T[3 * f + k] + 1]; }
+  const r = rasterOverlap(tri, res, [x0, y0, size]);
+  return r.overlapped > Math.max(2, r.covered * tolerance);
 }
 
 /** Mesh edge between mesh vertices a and b (or -1). */
@@ -353,12 +415,13 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
   const queue = componentsOf(mesh, all, seam, inSet).map(c => ({ faces: c, depth: 0 }));
   const charts = [];
   let processedFaces = 0;
-  let autoCuts = 0;
+  let autoCuts = 0, overlapSplits = 0;
 
   while (queue.length) {
     const { faces, depth } = queue.pop();
     const W = buildWedges(mesh, faces, seam, faceLocal);
     let ok = W.chi === 1 && W.boundaryVerts.length >= 2;
+    let overlapBad = false;
     let res = null, dist = null;
     if (ok) {
       const pins = farthestPins(W.P, W.boundaryVerts);
@@ -367,10 +430,12 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
       if (dist.mirrored) for (let i = 0; i < res.uv.length; i += 2) res.uv[i] = -res.uv[i];
       if (!isFinite(dist.distortion)) ok = false;
       else if ((dist.distortion > params.maxDistortion || dist.flipFrac > 0.002) && faces.length >= 6 && depth < params.maxDepth) ok = false;
+      else if (params.rejectOverlap && faces.length >= 2 && chartSelfOverlaps(res.uv, W.T, params.overlapTolerance)) { ok = false; overlapBad = true; overlapSplits++; }
     }
     // topology problems (not a disk) are always cut further: every split strictly shrinks the chart,
     // so this terminates; distortion-driven splits are limited by maxDepth
     const topoBad = !(W.chi === 1 && W.boundaryVerts.length >= 2);
+    const mustSplit = topoBad || overlapBad; // invalid layouts are always cut further (each split shrinks the chart)
     if (topoBad && W.chi < 1 && W.bEdges.length) {
       const path = connectBoundaryLoops(mesh, W, cost);
       if (path) {
@@ -383,7 +448,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
         }
       }
     }
-    if (!ok && faces.length > 1 && (topoBad || depth < params.maxDepth)) {
+    if (!ok && faces.length > 1 && (mustSplit || depth < params.maxDepth)) {
       // NOTE: the flood barrier is the seam *likelihood*: high cost = good place for a seam
       const cut = splitChart(mesh, faces, cost, seam, faceLocal, centroid);
       if (cut && cut.length) {
@@ -428,7 +493,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
     stats: {
       charts: charts.length,
       seamEdges: seam.reduce((s, x, e) => s + (x && !mesh.boundary[e] ? 1 : 0), 0),
-      autoCuts,
+      autoCuts, overlapSplits,
       distortion: distSum / (areaSum || 1),
       flips,
       packingEfficiency: packed.efficiency,
