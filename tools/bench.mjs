@@ -30,6 +30,7 @@ const dataDir = opt('data', 'training/models');
 const methods = opt('methods', 'ours,dihedral,artistSeams,artistUV,xatlas').split(',');
 const filter = new RegExp(opt('filter', '.'));
 const maxFaces = +opt('max-faces', 150000);
+const onlyScored = argv.includes('--only-scored'); // skip meshes without a usable artist reference
 const overlapRes = +opt('overlap-res', 1024);
 const MIN_REF_FACES_PER_CHART = 60; // same rule as the training-data filter
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -50,6 +51,20 @@ function meshStats(mesh) {
     genus: Math.max(0, (2 * comps.size - chi - loops) / 2), // total genus over components (approx. for non-manifold input)
     nonManifoldEdges: mesh.nonManifold.reduce((a, b) => a + b, 0),
   };
+}
+
+// chance level for seam agreement: k uniform random edge sets of the same size
+function chanceF1(mesh, labels, count, k, tol = 0.01) {
+  const cand = []; for (let e = 0; e < mesh.nE; e++) if (labels[e] !== 255) cand.push(e);
+  if (!count || !cand.length) return null;
+  let seed = 12345, sum = 0;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < k; i++) {
+    const pick = new Uint8Array(mesh.nE);
+    for (let j = 0; j < Math.min(count, cand.length); j++) { const r = j + Math.floor(rnd() * (cand.length - j)); [cand[j], cand[r]] = [cand[r], cand[j]]; pick[cand[j]] = 1; }
+    sum += seamAgreement(mesh, pick, labels, tol).seamF1Tol;
+  }
+  return sum / k;
 }
 
 // ------------------------------------------------------------------ run
@@ -83,6 +98,7 @@ for (const file of files) {
       base.reference = refSeams === 0 ? 'no-seams' : base.refFacesPerChart < MIN_REF_FACES_PER_CHART ? 'auto-atlas' : 'usable';
     } else base.reference = 'none';
     const scoreSeams = base.reference === 'usable';
+    if (onlyScored && !scoreSeams) continue;
     for (const method of methods) {
       const row = { ...base, method };
       const t0 = performance.now();
@@ -96,7 +112,19 @@ for (const file of files) {
         if (scoreSeams) {
           row.chartsVsArtist = row.charts / base.refCharts;
           const { seam } = uvSeamsAndCharts(mesh, res.cornerUV);
-          Object.assign(row, seamAgreement(mesh, seam, labels));
+          const ag = seamAgreement(mesh, seam, labels, 0.01, true);
+          delete ag.classes;
+          Object.assign(row, ag);
+          // shares by seam length (as in the visual report)
+          row.foundLen = ag.lengths.ref ? 1 - ag.lengths.missed / ag.lengths.ref : null;
+          row.extraLen = ag.lengths.pred ? ag.lengths.extra / ag.lengths.pred : null;
+          row.seamLenVsArtist = ag.lengths.ref ? ag.lengths.pred / ag.lengths.ref : null;
+          delete row.lengths;
+          // tolerance sensitivity
+          for (const [k, t] of [['05', 0.005], ['2', 0.02], ['3', 0.03]]) row['seamF1Tol' + k] = seamAgreement(mesh, seam, labels, t).seamF1Tol;
+          // chance level: the same number of seam edges placed uniformly at random (mean of 3 draws)
+          row.seamF1TolChance = chanceF1(mesh, labels, ag.predSeams, 3);
+          row.seamF1Tol3Chance = chanceF1(mesh, labels, ag.predSeams, 3, 0.03);
           if (res.prob) row.seamAUC = evaluate(res.prob, labels).auc;
         }
         row.status = row.valid ? 'ok' : 'invalid';
@@ -118,7 +146,7 @@ writeFileSync(join(outDir, 'results.csv'), [cols.join(','), ...rows.map(r => col
 
 const median = a => { const s = a.filter(x => isFinite(x)).sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
 const mean = a => { const s = a.filter(x => isFinite(x)); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : NaN; };
-const KEYS = ['charts', 'chartsPer1kFaces', 'chartsVsArtist', 'seamLengthNorm', 'areaDistMean', 'areaDistP95', 'angleDistMean', 'angleDistP95', 'overlapRatio', 'flips', 'utilization', 'seamF1', 'seamF1Tol', 'seamAUC', 'timeMs'];
+const KEYS = ['foundLen', 'extraLen', 'seamLenVsArtist', 'seamF1Tol05', 'seamF1Tol2', 'seamF1Tol3', 'seamF1TolChance', 'seamF1Tol3Chance', 'charts', 'chartsPer1kFaces', 'chartsVsArtist', 'seamLengthNorm', 'areaDistMean', 'areaDistP95', 'angleDistMean', 'angleDistP95', 'overlapRatio', 'flips', 'utilization', 'seamF1', 'seamF1Tol', 'seamAUC', 'timeMs'];
 const summary = { date: new Date().toISOString(), gitCommit, node: process.version, dataDir, methods, params, maxFaces, overlapRes, meshes: new Set(rows.map(r => r.model + '/' + r.mesh)).size, byMethod: {} };
 for (const method of methods) {
   for (const split of ['all', 'unseen', 'train']) {
