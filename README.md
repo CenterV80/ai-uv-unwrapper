@@ -23,6 +23,11 @@ npm run serve
    自分のスタイルにモデルを適応。重みはブラウザに保存され、JSONで保存・読込も可能
 5. **書き出し** — OBJ（UV付き）、GLB（チェッカーテクスチャ付き）、UVレイアウトPNG
 
+## GitHub Pages で公開
+
+`main` に push すると `.github/workflows/pages.yml` が `node build.mjs` で `dist/` を作り、GitHub Pages に公開します。
+初回のみ、リポジトリの Settings → Pages → Source を「GitHub Actions」にしてください。
+
 ## 仕組み
 
 ```
