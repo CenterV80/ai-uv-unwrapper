@@ -39,7 +39,7 @@ const METRICS = [
   { key: 'seamF1Tol3', label: 'シームF1（許容3%）', better: 'high' },
   { key: 'foundLen', label: '見つけた割合（長さ）', better: 'high' },
   { key: 'extraLen', label: '余計な割合（長さ）', better: 'low' },
-  { key: 'chartsGap', label: '枚数のずれ |log(枚数÷アーティスト)|', better: 'low', derive: r => Math.abs(Math.log(num(r.chartsVsArtist))) },
+  { key: 'chartsGap', label: '枚数のずれ（アーティスト比のlogの絶対値）', better: 'low', derive: r => Math.abs(Math.log(num(r.chartsVsArtist))) },
   { key: 'angleDistP95', label: '角度歪みP95', better: 'low' },
   { key: 'areaDistP95', label: '面積歪みP95', better: 'low' },
   { key: 'valid', label: 'UV有効', better: 'high', binary: true, derive: r => (r.status === 'ok' ? 1 : 0) },
