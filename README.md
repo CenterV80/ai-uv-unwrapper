@@ -87,6 +87,36 @@ UVの不連続箇所を正解シームとして抽出し、自動生成アトラ
 - ベースモデル単体の改善幅は小さく、効いているのは「予測確率を経路コストとして使う位相修正カット・分割」と
   「ユーザーデータでの微調整」の組み合わせです。
 
+## 別のPCへの移築
+
+Node.js 18以上（推奨22）があれば Windows / macOS / Linux で動きます。GPUは不要です。
+
+```bash
+git clone -b research-eval https://github.com/CenterV80/ai-uv-unwrapper.git
+```
+
+```bash
+cd ai-uv-unwrapper
+```
+
+```bash
+npm install
+```
+
+```bash
+npm run setup:data
+```
+
+```bash
+npm test
+```
+
+- `setup:data` は学習・評価用の glTF サンプル（約3億バイト）と、そのライセンス情報を取得します（raw.githubusercontent.com への接続が必要）
+- 画像→3D などで作った自分のメッシュは `data/` フォルダ（Git管理外）に OBJ / GLB で置き、
+  `node tools/bench.mjs --data data/<フォルダ名> --methods ours,dihedral,xatlas` で評価します
+  （元のUVがないメッシュでは、シーム一致度以外の指標が出ます）
+- `results/` と `data/` は `.gitignore` 済みです。**このリポジトリは公開なので、社内データや評価結果はコミットしないでください**
+
 ## 研究用の評価（一括ベンチマーク）
 
 ```bash

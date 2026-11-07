@@ -3,3 +3,7 @@ node_modules/
 training/models/
 *.log
 dist/
+# Benchmark outputs and private evaluation meshes (e.g. company image-to-3D results) stay local.
+# This repository is public: do not commit data you are not allowed to publish.
+results/
+data/
