@@ -6,8 +6,10 @@ import { SeamPredictor } from '../src/core/model.js';
 import { predictSeams } from '../src/core/predict.js';
 import { unwrap } from '../src/core/unwrap.js';
 import weights from '../src/weights.js';
+import weightsV1 from '../src/weights-v1.js';
 
 const predictor = SeamPredictor.fromJSON(weights);
+const predictorV1 = SeamPredictor.fromJSON(weightsV1);
 const DIHEDRAL_SEAM_DEG = 30; // baseline: cut where the surface folds by >= 30°
 
 function runPipeline(mesh, ctx, prob, params) {
@@ -22,6 +24,19 @@ export const METHODS = {
     const feats = ctx.feats || (ctx.feats = computeEdgeFeatures(mesh));
     const { prob } = predictSeams(mesh, predictor, feats);
     return runPipeline(mesh, ctx, prob, { threshold: weights.meta.defaultThreshold, ...opts.params });
+  },
+  /** v1 predictor (artist meshes only, 22 features) for before/after comparisons */
+  oursV1(mesh, ctx, opts) {
+    const feats = ctx.feats || (ctx.feats = computeEdgeFeatures(mesh));
+    const { prob } = predictSeams(mesh, predictorV1, feats);
+    return runPipeline(mesh, ctx, prob, { threshold: weightsV1.meta.defaultThreshold, ...opts.params });
+  },
+  oursV1Adaptive(mesh, ctx, opts) {
+    return METHODS.oursV1(mesh, ctx, { ...opts, params: { seamMode: 'adaptive', ...opts.params } });
+  },
+  /** learned predictor + threshold-free extraction (robust z-score per mesh + non-maximum suppression) */
+  oursAdaptive(mesh, ctx, opts) {
+    return METHODS.ours(mesh, ctx, { ...opts, params: { seamMode: 'adaptive', ...opts.params } });
   },
   /** same pipeline, seams from a fixed dihedral-angle threshold (no learning) */
   dihedral(mesh, ctx, opts) {

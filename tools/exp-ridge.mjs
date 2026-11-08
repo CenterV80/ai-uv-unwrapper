@@ -17,7 +17,7 @@ const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i
 const N = +opt('n', 30), LEVELS = opt('levels', '0,0.003,0.006,0.012,0.024').split(',').map(Number);
 const OUT = opt('out', 'results/v8-ridge'), DATA = opt('data', 'data/garments-ridge');
 const METHOD_IDS = opt('methods', 'ours,dihedral,xatlas').split(',');
-const NAME = { ours: '本手法', dihedral: '二面角だけ', xatlas: 'xatlas' };
+const NAME = { ours: '本手法', oursAdaptive: '本手法＋相対的な切り方', oursV1: '旧モデル', oursV1Adaptive: '旧モデル＋相対的な切り方', dihedral: '二面角だけ', xatlas: 'xatlas' };
 
 mkdirSync(OUT, { recursive: true });
 const rows = [];

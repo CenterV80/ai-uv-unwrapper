@@ -1,5 +1,7 @@
 // Train the base seam predictor on artist-made UV layouts from glTF sample models.
-// Usage: node training/train.mjs [--epochs 30]
+// Usage: node training/train.mjs [--epochs 30] [--garments dirA,dirB] [--garment-weight 1]
+//   --garments: labels-only OBJs from tools/gen-garments.mjs (use seeds other than the evaluation seed 1)
+//   --garment-weight: total training weight of the garments relative to the artist meshes
 import { readdirSync, writeFileSync } from 'node:fs';
 import { readGLB } from './glb.mjs';
 import { buildMesh, seamsFromUV, UnionFind } from '../src/core/mesh.js';
@@ -7,10 +9,13 @@ import { computeEdgeFeatures, contextFeatures, NF, NF2, FEATURE_NAMES } from '..
 import { MLP, SeamPredictor } from '../src/core/model.js';
 import { sampleRows, concatRows, evaluate } from '../src/core/predict.js';
 import { loadLicenses, checkModel, writeNotice } from './licenses.mjs';
+import { readOBJ } from '../tools/load.mjs';
 
 const args = process.argv.slice(2);
 const EPOCHS = +(args[args.indexOf('--epochs') + 1] || 30) || 30;
 const NOWRITE = args.includes('--dry');
+const GARMENT_DIRS = args.includes('--garments') ? args[args.indexOf('--garments') + 1].split(',') : [];
+const GARMENT_WEIGHT = args.includes('--garment-weight') ? +args[args.indexOf('--garment-weight') + 1] : 1;
 const dir = new URL('./models/', import.meta.url).pathname;
 const HOLDOUT = new Set(['BoomBox', 'Corset', 'SheenChair', 'CesiumMilkTruck']);
 const licenses = loadLicenses();
@@ -44,11 +49,25 @@ for (const file of readdirSync(dir).filter(f => f.endsWith('.glb')).sort()) {
     if (fpc < MIN_FACES_PER_CHART || nm > 0.01 * mesh.nE || pos < 5) continue;
     const feats = computeEdgeFeatures(mesh);
     for (let e = 0; e < mesh.nE; e++) for (const j of maskIdx) feats.X[e * NF + j] = 0;
-    items.push({ model, name: m.name, mesh, labels, feats, holdout: HOLDOUT.has(model) });
+    items.push({ model, name: m.name, mesh, labels, feats, holdout: HOLDOUT.has(model), group: 'artist' });
   }
   process.stdout.write(`loaded ${model}\n`);
 }
 if (excluded.length) console.log('ライセンスにより除外:\n  ' + excluded.join('\n  '));
+// generated garments (reference seams by construction); never used for the artist hold-out evaluation
+for (const gdir of GARMENT_DIRS) {
+  const files = readdirSync(gdir).filter(f => f.endsWith('.obj'));
+  if (files.some(f => /_s1_/.test(f))) throw new Error(`${gdir}: seed 1 is the evaluation seed and must not be used for training`);
+  for (const f of files) {
+    const m = readOBJ(`${gdir}/${f}`)[0];
+    const mesh = buildMesh(m.positions, m.indices, m.cornerUV);
+    const labels = seamsFromUV(mesh);
+    const feats = computeEdgeFeatures(mesh);
+    for (let e = 0; e < mesh.nE; e++) for (const j of maskIdx) feats.X[e * NF + j] = 0;
+    items.push({ model: f.replace(/\.obj$/, ''), name: f, mesh, labels, feats, holdout: false, group: 'garment' });
+  }
+  console.log(`loaded ${files.length} garments from ${gdir}`);
+}
 const train = items.filter(i => !i.holdout), test = items.filter(i => i.holdout);
 console.log(`train meshes: ${train.length} (${new Set(train.map(i => i.model)).size} models), test meshes: ${test.length}`);
 
@@ -66,6 +85,15 @@ function rowsFor(list, featFn, nf) {
   });
 }
 
+/** concatRows, then rescale so the garments' total weight is GARMENT_WEIGHT x the artist meshes'. */
+function concatMixed(list, sets, nf) {
+  const d = concatRows(sets, nf);
+  let o = 0, wa = 0, wg = 0; const ranges = [];
+  sets.forEach((st, i) => { const n = st.y.length; ranges.push([o, o + n, list[i].group]); for (let j = o; j < o + n; j++) { if (list[i].group === 'garment') wg += d.w[j]; else wa += d.w[j]; } o += n; });
+  if (wg > 0 && wa > 0) { const f = (GARMENT_WEIGHT * wa) / wg; for (const [a, b, g] of ranges) if (g === 'garment') for (let j = a; j < b; j++) d.w[j] *= f; }
+  return d;
+}
+
 async function trainMLP(sizes, data, nf, label, sd) {
   const m = new MLP(sizes, sd);
   m.setNormalization(data.X, data.y.length);
@@ -81,22 +109,23 @@ async function trainMLP(sizes, data, nf, label, sd) {
 const H1 = (process.env.H1 ?? '').split(',').filter(Boolean).map(Number);
 const H2 = (process.env.H2 ?? '').split(',').filter(Boolean).map(Number);
 const S1 = [NF, ...H1, 1], S2 = [NF2, ...H2, 1];
-const models = [...new Set(train.map(i => i.model))];
-const foldOf = it => models.indexOf(it.model) % 2;
+const models = [...new Set(train.filter(i => i.group === 'artist').map(i => i.model))];
+const allModels = [...new Set(train.map(i => i.model))];
+const foldOf = it => allModels.indexOf(it.model) % 2;
 const oof = new Map();
 for (let k = 0; k < 2; k++) {
   console.log(`stage1 fold ${k}`);
   const tr = train.filter(i => foldOf(i) !== k);
-  const d = concatRows(rowsFor(tr, it => it.feats.X, NF), NF);
+  const d = concatMixed(tr, rowsFor(tr, it => it.feats.X, NF), NF);
   const m = await trainMLP(S1, d, NF, `fold${k}`, 21 + k);
   for (const it of train.filter(i => foldOf(i) === k)) oof.set(it, m.predict(it.feats.X, it.mesh.nE));
 }
 console.log('stage1 full');
-const d1 = concatRows(rowsFor(train, it => it.feats.X, NF), NF);
+const d1 = concatMixed(train, rowsFor(train, it => it.feats.X, NF), NF);
 const stage1 = await trainMLP(S1, d1, NF, 'stage1', 31);
 
 console.log('stage2');
-const d2 = concatRows(rowsFor(train, it => contextFeatures(it.mesh, it.feats.X, oof.get(it)), NF2), NF2);
+const d2 = concatMixed(train, rowsFor(train, it => contextFeatures(it.mesh, it.feats.X, oof.get(it)), NF2), NF2);
 const stage2 = await trainMLP(S2, d2, NF2, 'stage2', 41);
 const predictor = new SeamPredictor(stage1, stage2);
 
@@ -118,7 +147,7 @@ console.log('pooled holdout:', JSON.stringify(summary, (k, v) => typeof v === 'n
 
 // ---- calibrate the default threshold so the predicted seam rate matches artists' seam rate
 const allP = [], rates = [];
-for (const it of train) {
+for (const it of train.filter(i => i.group === 'artist')) { // calibrate on artist layouts only, as before
   const p1 = stage1.predict(it.feats.X, it.mesh.nE);
   const p2 = stage2.predict(contextFeatures(it.mesh, it.feats.X, p1), it.mesh.nE);
   let n = 0, pos = 0;
@@ -134,7 +163,7 @@ const atThr = evaluate(Array.from(agg.s2[0]), Uint8Array.from(agg.s2[1]), defaul
 console.log(`default threshold ${defaultThreshold} (target seam rate ${(targetRate * 100).toFixed(1)}%) -> holdout P ${atThr.precision.toFixed(3)} R ${atThr.recall.toFixed(3)} F1 ${atThr.f1.toFixed(3)}`);
 
 const json = predictor.toJSON();
-json.meta = { licensePolicy: 'CC0-1.0, CC-BY-4.0 only (see NOTICE.md)', defaultThreshold, holdoutAtDefault: atThr, masked: MASK, trainedOn: models, holdout: [...HOLDOUT], epochs: EPOCHS, holdoutSummary: summary, date: new Date().toISOString().slice(0, 10) };
+json.meta = { version: GARMENT_DIRS.length ? 2 : 1, features: NF, trainedOnGenerated: GARMENT_DIRS, garmentWeight: GARMENT_DIRS.length ? GARMENT_WEIGHT : 0, licensePolicy: 'CC0-1.0, CC-BY-4.0 only (see NOTICE.md)', defaultThreshold, holdoutAtDefault: atThr, masked: MASK, trainedOn: models, holdout: [...HOLDOUT], epochs: EPOCHS, holdoutSummary: summary, date: new Date().toISOString().slice(0, 10) };
 if (!NOWRITE) writeNotice(licenses, models, new URL('../NOTICE.md', import.meta.url).pathname);
 if (!NOWRITE) writeFileSync(new URL('../src/weights.js', import.meta.url), '// Generated by training/train.mjs — base seam predictor weights.\nexport default ' + JSON.stringify(json) + ';\n');
 writeFileSync(new URL('./report.json', import.meta.url), JSON.stringify({ summary, report }, null, 1));

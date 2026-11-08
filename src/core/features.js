@@ -6,6 +6,7 @@ export const FEATURE_NAMES = [
   'nbr1', 'nbr2', 'nbr4', 'ridge', 'lineMin', 'lineMax',
   'normalY', 'height', 'symmetryX', 'nearBoundary',
   'creaseS', 'creaseL', 'creaseRidgeS',
+  'crossRatio', 'ridgeLocal',
 ];
 export const NF = FEATURE_NAMES.length;
 export const CONTEXT_NAMES = ['p', 'pNbr1', 'pNbr2', 'pLineMin', 'pLineMax', 'pNbrMax'];
@@ -185,6 +186,7 @@ export function computeEdgeFeatures(mesh) {
   const rangeY = (bboxMax[1] - bboxMin[1]) || 1, rangeX = (bboxMax[0] - bboxMin[0]) || 1;
   const cx = 0.5 * (bboxMin[0] + bboxMax[0]);
 
+  const { cross, local } = fineRidgeFeatures(mesh, a);
   const X = new Float32Array(nE * NF);
   for (let e = 0; e < nE; e++) {
     const va = edgeV[2 * e], vb = edgeV[2 * e + 1];
@@ -216,20 +218,61 @@ export function computeEdgeFeatures(mesh) {
     X[o + 19] = Math.min(1, creaseS[e] * 4);
     X[o + 20] = Math.min(1, creaseL[e] * 8);
     X[o + 21] = Math.max(-1, Math.min(1, (creaseS[e] - creaseSn[e]) * 4));
+    X[o + 22] = cross[e];
+    X[o + 23] = local[e];
   }
   return { X, dihedral: a };
 }
 
+/**
+ * Fine-scale ridge cues (V8b): a thin seam ridge is a line of edges that fold more than the edges
+ * running alongside them.
+ *  - crossRatio: dihedral / max dihedral of roughly parallel edges at the opposite vertices of the
+ *    two adjacent faces (> 1 on a crest), clamped to [0, 5]
+ *  - ridgeLocal: dihedral minus the median dihedral of all edges around the edge's four vertices
+ */
+export function fineRidgeFeatures(mesh, a) {
+  const { nE, edgeV, edgeF, faces, pos, vEdgeStart, vEdges } = mesh;
+  const cross = new Float32Array(nE), local = new Float32Array(nE);
+  const dir = e => {
+    const p = edgeV[2 * e], q = edgeV[2 * e + 1];
+    const x = pos[3 * q] - pos[3 * p], y = pos[3 * q + 1] - pos[3 * p + 1], z = pos[3 * q + 2] - pos[3 * p + 2];
+    const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l];
+  };
+  const around = [];
+  for (let e = 0; e < nE; e++) {
+    const va = edgeV[2 * e], vb = edgeV[2 * e + 1], d = dir(e);
+    const verts = [va, vb];
+    let m = 0;
+    for (let j = 0; j < 2; j++) {
+      const f = edgeF[2 * e + j]; if (f < 0) continue;
+      let opp = faces[3 * f]; if (opp === va || opp === vb) opp = faces[3 * f + 1]; if (opp === va || opp === vb) opp = faces[3 * f + 2];
+      verts.push(opp);
+      for (let i = vEdgeStart[opp]; i < vEdgeStart[opp + 1]; i++) {
+        const o = vEdges[i]; const q = dir(o);
+        if (Math.abs(d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) >= 0.7 && a[o] > m) m = a[o];
+      }
+    }
+    cross[e] = Math.min(5, a[e] / (m + 0.01));
+    around.length = 0;
+    for (const v of verts) for (let i = vEdgeStart[v]; i < vEdgeStart[v + 1]; i++) around.push(a[vEdges[i]]);
+    around.sort((x, y) => x - y);
+    local[e] = a[e] - (around[around.length >> 1] || 0);
+  }
+  return { cross, local };
+}
+
 /** Stage-2 features: stage-1 features + context from stage-1 predictions. */
-export function contextFeatures(mesh, X1, p) {
+export function contextFeatures(mesh, X1, p, nf = NF) {
   const nE = mesh.nE;
   const q1 = diffuse(mesh, p), q2 = diffuse(mesh, q1);
   const [lo, hi] = lineContinuation(mesh, p);
   const mx = neighbourMax(mesh, p);
-  const X2 = new Float32Array(nE * NF2);
+  const nf2 = nf + CONTEXT_NAMES.length;
+  const X2 = new Float32Array(nE * nf2);
   for (let e = 0; e < nE; e++) {
-    X2.set(X1.subarray(e * NF, e * NF + NF), e * NF2);
-    const o = e * NF2 + NF;
+    X2.set(X1.subarray(e * nf, e * nf + nf), e * nf2);
+    const o = e * nf2 + nf;
     X2[o] = p[e]; X2[o + 1] = q1[e]; X2[o + 2] = q2[e]; X2[o + 3] = lo[e]; X2[o + 4] = hi[e]; X2[o + 5] = mx[e];
   }
   return X2;

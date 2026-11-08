@@ -10,6 +10,10 @@ export const DEFAULT_PARAMS = {
   minFragment: 3,        // seam fragments shorter than this many edges are dropped
   extendRatio: 0.7,      // dangling seam ends may continue along edges with prob >= threshold * extendRatio
   extendSteps: 0,        // ... for at most this many edges (0 = off; experimental gap closing, not validated)
+  seamMode: 'absolute',  // 'absolute': prob >= threshold. 'adaptive': also edges that stand out on this mesh
+                         //   (robust z-score >= adaptiveZ, prob >= adaptiveFloor) and are the local maximum across the line
+  adaptiveZ: 4,
+  adaptiveFloor: 0.3,
   padding: 4,            // texels between charts
   resolution: 1024,      // texture size used to convert padding to UV units
   maxDepth: 14,
@@ -52,8 +56,9 @@ class MinHeap {
 export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
   const { nE, edgeV, boundary, nonManifold, nV, vEdgeStart, vEdges } = mesh;
   const seam = new Uint8Array(nE);
+  const adaptive = params.seamMode === 'adaptive' ? adaptiveSeams(mesh, prob, params) : null;
   for (let e = 0; e < nE; e++) {
-    let s = prob[e] >= params.threshold ? 1 : 0;
+    let s = prob[e] >= params.threshold || (adaptive && adaptive[e]) ? 1 : 0;
     if (userSeam && userSeam[e]) s = userSeam[e] > 0 ? 1 : 0;
     if (boundary[e] || nonManifold[e]) s = 1;
     seam[e] = s;
@@ -83,6 +88,47 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
     if (!forced && !touchesBoundary && comp.length < params.minFragment) for (const e of comp) seam[e] = 0;
   }
   return seam;
+}
+
+/**
+ * Threshold-free seam candidates: edges whose probability stands out on *this* mesh
+ * (robust z-score against the mesh's own median / MAD) and that are the local maximum across the
+ * seam line (non-maximum suppression: no roughly parallel edge at the opposite vertices of the two
+ * adjacent faces scores higher). Thin ridges thus give one line of edges instead of a band.
+ */
+export function adaptiveSeams(mesh, prob, params) {
+  const { nE, edgeV, edgeF, faces, pos, boundary, vEdgeStart, vEdges } = mesh;
+  const vals = []; for (let e = 0; e < nE; e++) if (!boundary[e]) vals.push(prob[e]);
+  vals.sort((a, b) => a - b);
+  const med = vals[vals.length >> 1] ?? 0;
+  const dev = vals.map(v => Math.abs(v - med)).sort((a, b) => a - b);
+  const mad = Math.max(1e-6, (dev[dev.length >> 1] ?? 0) * 1.4826);
+  const out = new Uint8Array(nE);
+  const dir = e => {
+    const a = edgeV[2 * e], b = edgeV[2 * e + 1];
+    const x = pos[3 * b] - pos[3 * a], y = pos[3 * b + 1] - pos[3 * a + 1], z = pos[3 * b + 2] - pos[3 * a + 2];
+    const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l];
+  };
+  for (let e = 0; e < nE; e++) {
+    if (boundary[e]) continue;
+    const p = prob[e];
+    if (p < params.adaptiveFloor || (p - med) / mad < params.adaptiveZ) continue;
+    const d = dir(e);
+    let isMax = true;
+    for (let j = 0; j < 2 && isMax; j++) {
+      const f = edgeF[2 * e + j]; if (f < 0) continue;
+      let opp = faces[3 * f]; if (opp === edgeV[2 * e] || opp === edgeV[2 * e + 1]) opp = faces[3 * f + 1];
+      if (opp === edgeV[2 * e] || opp === edgeV[2 * e + 1]) opp = faces[3 * f + 2];
+      for (let i = vEdgeStart[opp]; i < vEdgeStart[opp + 1]; i++) {
+        const o = vEdges[i]; if (o === e) continue;
+        const q = dir(o);
+        if (Math.abs(d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) < 0.7) continue; // only edges running alongside
+        if (prob[o] > p) { isMax = false; break; }
+      }
+    }
+    if (isMax) out[e] = 1;
+  }
+  return out;
 }
 
 /**

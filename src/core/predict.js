@@ -2,10 +2,20 @@
 import { computeEdgeFeatures, contextFeatures, NF, NF2 } from './features.js';
 import { MLP, SeamPredictor } from './model.js';
 
+/** First k feature columns (older models were trained on fewer features). */
+function leadingColumns(X, nE, k) {
+  if (k === NF) return X;
+  const out = new Float32Array(nE * k);
+  for (let e = 0; e < nE; e++) out.set(X.subarray(e * NF, e * NF + k), e * k);
+  return out;
+}
+
 export function predictSeams(mesh, predictor, feats = null) {
   const f = feats || computeEdgeFeatures(mesh);
-  const p1 = predictor.stage1.predict(f.X, mesh.nE);
-  const X2 = contextFeatures(mesh, f.X, p1);
+  const k = predictor.stage1.sizes[0];
+  const X1 = leadingColumns(f.X, mesh.nE, k);
+  const p1 = predictor.stage1.predict(X1, mesh.nE);
+  const X2 = contextFeatures(mesh, X1, p1, k);
   const p2 = predictor.stage2.predict(X2, mesh.nE);
   for (let e = 0; e < mesh.nE; e++) if (mesh.boundary[e]) p2[e] = 1;
   return { prob: p2, stage1: p1, feats: f };
