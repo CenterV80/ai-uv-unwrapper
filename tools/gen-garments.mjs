@@ -11,6 +11,8 @@
 //  - pants: left and right halves are separate pieces (centre front / centre back seam)
 //  - skirts: gores (2/4/6 per garment) split front and back vertically
 //  - dress: bodice and skirt joined by a waist seam
+//  - optional seam ridges (--ridge): seams between pieces on the same side bulge outwards by a Gaussian
+//    profile of the given height; front/back joins already show as folds and get no ridge
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sewPanels } from '../src/garments.js';
@@ -18,6 +20,8 @@ import { sewPanels } from '../src/garments.js';
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i + 1] : d; };
 const N = +opt('n', 50), SEED = +opt('seed', 1), OUT = opt('out', 'data/garments');
+// seam ridge: height of the bulge a sewn seam leaves on the cloth (0 = no geometric trace), and its half-width
+const RIDGE = +opt('ridge', 0), RIDGE_W = +opt('ridge-width', 0.04);
 const TYPES = opt('types', 'tee,pants,skirt,dress').split(',');
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -120,6 +124,55 @@ function dress(r) {
 
 const GEN = { tee, pants, skirt, dress };
 
+/**
+ * Seam ridges: vertices near a border between two pieces on the same side are pushed along the
+ * surface normal by h * exp(-(d / w)^2), d = distance to the border in pattern space.
+ */
+function addSeamRidges(P, pattern, I, chart, halfFaces, h, w) {
+  const nv = P.length / 3, nf = I.length / 3, frontVerts = nv / 2;
+  // border segments (pattern space) between faces of the same side with different pieces
+  const edgeFaces = new Map();
+  for (let f = 0; f < nf; f++) for (let k = 0; k < 3; k++) {
+    const a = I[3 * f + k], b = I[3 * f + (k + 1) % 3], key = a < b ? a * nv + b : b * nv + a;
+    (edgeFaces.get(key) || edgeFaces.set(key, []).get(key)).push(f);
+  }
+  const segs = [[], []]; // per side
+  for (const [key, fs] of edgeFaces) {
+    if (fs.length !== 2 || chart[fs[0]] === chart[fs[1]]) continue;
+    const side = fs[0] < halfFaces ? 0 : 1;
+    if ((fs[1] < halfFaces ? 0 : 1) !== side) continue;
+    const a = Math.floor(key / nv), b = key % nv;
+    segs[side].push(pattern[3 * a], pattern[3 * a + 1], pattern[3 * b], pattern[3 * b + 1]);
+  }
+  // vertex normals, accumulated over coincident positions so both sides of a join agree
+  const keyOf = v => `${P[3 * v].toFixed(5)},${P[3 * v + 1].toFixed(5)},${P[3 * v + 2].toFixed(5)}`;
+  const acc = new Map();
+  for (let f = 0; f < nf; f++) {
+    const [a, b, c] = [I[3 * f], I[3 * f + 1], I[3 * f + 2]];
+    const ux = P[3 * b] - P[3 * a], uy = P[3 * b + 1] - P[3 * a + 1], uz = P[3 * b + 2] - P[3 * a + 2];
+    const vx = P[3 * c] - P[3 * a], vy = P[3 * c + 1] - P[3 * a + 1], vz = P[3 * c + 2] - P[3 * a + 2];
+    const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+    for (const v of [a, b, c]) { const k = keyOf(v); const s = acc.get(k) || [0, 0, 0]; s[0] += n[0]; s[1] += n[1]; s[2] += n[2]; acc.set(k, s); }
+  }
+  const disp = new Float64Array(3 * nv);
+  for (let v = 0; v < nv; v++) {
+    const S = segs[v < frontVerts ? 0 : 1];
+    if (!S.length) continue;
+    const x = pattern[3 * v], y = pattern[3 * v + 1];
+    let d2 = Infinity;
+    for (let i = 0; i < S.length; i += 4) {
+      const dx = S[i + 2] - S[i], dy = S[i + 3] - S[i + 1], l2 = dx * dx + dy * dy || 1e-12;
+      const t = Math.max(0, Math.min(1, ((x - S[i]) * dx + (y - S[i + 1]) * dy) / l2));
+      d2 = Math.min(d2, (x - S[i] - t * dx) ** 2 + (y - S[i + 1] - t * dy) ** 2);
+    }
+    const amp = h * Math.exp(-d2 / (w * w));
+    if (amp < 1e-6) continue;
+    const n = acc.get(keyOf(v)), l = Math.hypot(n[0], n[1], n[2]) || 1;
+    disp[3 * v] = amp * n[0] / l; disp[3 * v + 1] = amp * n[1] / l; disp[3 * v + 2] = amp * n[2] / l;
+  }
+  for (let i = 0; i < P.length; i++) P[i] += disp[i];
+}
+
 // ------------------------------------------------------------------ main
 mkdirSync(OUT, { recursive: true });
 const manifest = [];
@@ -128,6 +181,7 @@ for (const type of TYPES) {
     const seed = SEED * 100003 + i * 7919 + type.length * 131;
     const g = GEN[type](rng(seed));
     const { positions, indices } = sewPanels({ parts: g.parts, closed: g.closed, depth: g.depth, reach: g.reach, bend: 0.2 + 0.1 * rng(seed + 1)() });
+    const pattern = Float32Array.from(positions); // x, y stay pattern coordinates (sewPanels only moves z)
     // label every face with its piece: side (front/back) x panel, from the face centroid in pattern space
     const nf = indices.length / 3, half = nf / 2;
     const ids = new Map(), chart = new Int32Array(nf);
@@ -138,13 +192,14 @@ for (const type of TYPES) {
       if (!ids.has(key)) ids.set(key, ids.size);
       chart[f] = ids.get(key);
     }
-    const name = `gen_${type}_s${SEED}_${String(i).padStart(4, '0')}`;
+    if (RIDGE > 0) addSeamRidges(positions, pattern, indices, chart, half, RIDGE, RIDGE_W);
+    const name = `gen_${type}_s${SEED}_${String(i).padStart(4, '0')}` + (argv.includes("--ridge") ? `_r${String(Math.round(RIDGE * 1000)).padStart(3, "0")}` : "");
     const lines = ['# seamline: labels-only', `# generated ${type} seed ${seed} pieces ${[...ids.keys()].join(' ')}`];
     for (let v = 0; v < positions.length; v += 3) lines.push(`v ${+positions[v].toFixed(5)} ${+positions[v + 1].toFixed(5)} ${+positions[v + 2].toFixed(5)}`);
     for (let c = 0; c < ids.size; c++) lines.push(`vt ${c} 0.5`); // one texture coordinate per piece
     for (let f = 0; f < nf; f++) lines.push(`f ${indices[3 * f] + 1}/${chart[f] + 1} ${indices[3 * f + 1] + 1}/${chart[f] + 1} ${indices[3 * f + 2] + 1}/${chart[f] + 1}`);
     writeFileSync(join(OUT, name + '.obj'), lines.join('\n') + '\n');
-    manifest.push({ file: name + '.obj', type, seed, faces: nf, pieces: [...ids.keys()], params: g.p });
+    manifest.push({ file: name + '.obj', type, seed, faces: nf, pieces: [...ids.keys()], params: g.p, ridge: RIDGE, ridgeWidth: RIDGE_W });
   }
   console.log(`${type}: ${N} garments`);
 }

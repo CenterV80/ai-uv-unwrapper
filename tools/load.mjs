@@ -21,5 +21,6 @@ export function readOBJ(path) {
   }
   // "labels-only" OBJs (tools/voxelize.mjs) carry reference seams in their texture coordinates, not a real layout
   const labelsOnly = /^# seamline: labels-only/m.test(readFileSync(path, 'utf8').slice(0, 200));
-  return [{ name: basename(path), positions: Float32Array.from(V), indices: Uint32Array.from(idx), cornerUV: hasUV && cuv.length ? Float32Array.from(cuv) : null, labelsOnly }];
+  const header = readFileSync(path, 'utf8').slice(0, 4000).split('\n').filter(l => l.startsWith('#')).join('\n');
+  return [{ name: basename(path), positions: Float32Array.from(V), indices: Uint32Array.from(idx), cornerUV: hasUV && cuv.length ? Float32Array.from(cuv) : null, labelsOnly, header }];
 }
