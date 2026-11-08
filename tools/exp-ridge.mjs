@@ -17,13 +17,17 @@ const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i
 const N = +opt('n', 30), LEVELS = opt('levels', '0,0.003,0.006,0.012,0.024').split(',').map(Number);
 const OUT = opt('out', 'results/v8-ridge'), DATA = opt('data', 'data/garments-ridge');
 const METHOD_IDS = opt('methods', 'ours,dihedral,xatlas').split(',');
+const SEED = opt('seed', '1');
+// pipeline parameters, e.g. --param thinSeams=true (repeatable)
+const PARAMS = {};
+argv.forEach((a, i) => { if (a === '--param') { const [k, v] = argv[i + 1].split('='); PARAMS[k] = v === 'true' ? true : v === 'false' ? false : isNaN(+v) ? v : +v; } });
 const NAME = { ours: '本手法', oursAdaptive: '本手法＋相対的な切り方', oursV1: '旧モデル', oursV1Adaptive: '旧モデル＋相対的な切り方', dihedral: '二面角だけ', xatlas: 'xatlas' };
 
 mkdirSync(OUT, { recursive: true });
 const rows = [];
 for (const h of LEVELS) {
   const dir = join(DATA, `r${String(Math.round(h * 1000)).padStart(3, '0')}`);
-  execFileSync(process.execPath, ['tools/gen-garments.mjs', '--n', String(N), '--seed', '1', '--ridge', String(h), '--out', dir], { stdio: 'ignore' });
+  execFileSync(process.execPath, ['tools/gen-garments.mjs', '--n', String(N), '--seed', SEED, '--ridge', String(h), '--out', dir], { stdio: 'ignore' });
   for (const file of readdirSync(dir).filter(f => f.endsWith('.obj')).sort()) {
     const m = readOBJ(join(dir, file))[0];
     const pieces = (/pieces (.*)$/m.exec(m.header || '') || [])[1];
@@ -42,7 +46,7 @@ for (const h of LEVELS) {
     }
     const refCharts = uvSeamsAndCharts(mesh, mesh.cornerUV).charts;
     for (const method of METHOD_IDS) {
-      const res = await METHODS[method](mesh, { labels }, { params: {} });
+      const res = await METHODS[method](mesh, { labels }, { params: PARAMS });
       const { seam } = uvSeamsAndCharts(mesh, res.cornerUV);
       const ag = seamAgreement(mesh, seam, labels, 0.01, true);
       let missedI = 0, missedF = 0;
@@ -64,7 +68,7 @@ for (const h of LEVELS) {
 const cols = Object.keys(rows[0]);
 writeFileSync(join(OUT, 'results.csv'), [cols.join(','), ...rows.map(r => cols.map(c => r[c]).join(','))].join('\n') + '\n');
 const pct = v => (Number.isFinite(v) ? `${Math.round(v * 100)}%` : '–');
-const md = ['# 縫い目のふくらみと検出率（V8b）', '', `服 ${N * 4}着（4種類×${N}）× ふくらみ ${LEVELS.length}段階。割合は切れ目の長さで計算、許容1%、中央値。`, ''];
+const md = ['# 縫い目のふくらみと検出率', '', `服 ${N * 4}着（4種類×${N}、種${SEED}）× ふくらみ ${LEVELS.length}段階。パラメータ ${JSON.stringify(PARAMS)}。割合は切れ目の長さで計算、許容1%、中央値。`, ''];
 md.push('| ふくらみの高さ | 手法 | 内側の縫い目を見つけた | 前後の境目を見つけた | 余計な切れ目 | シームF1 | 枚数（正解比） | 有効率 |', '|---|---|---|---|---|---|---|---|');
 for (const h of LEVELS) for (const m of METHOD_IDS) {
   const rs = rows.filter(r => r.ridge === h && r.method === m);

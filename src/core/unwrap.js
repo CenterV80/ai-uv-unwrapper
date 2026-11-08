@@ -1,6 +1,6 @@
 // Seam probabilities -> charts -> LSCM -> packing.
 import { UnionFind } from './mesh.js';
-import { lscm, chartDistortion } from './lscm.js';
+import { lscm, arap, chartDistortion } from './lscm.js';
 import { packCharts } from './pack.js';
 import { rasterOverlap } from './metrics.js';
 
@@ -12,15 +12,20 @@ export const DEFAULT_PARAMS = {
   extendSteps: 0,        // ... for at most this many edges (0 = off; experimental gap closing, not validated)
   seamMode: 'absolute',  // 'absolute': prob >= threshold. 'adaptive': also edges that stand out on this mesh
                          //   (robust z-score >= adaptiveZ, prob >= adaptiveFloor) and are the local maximum across the line
-  adaptiveZ: 4,
+  adaptiveZ: 6,          // 8 = more conservative (fewer extra cuts, fewer seams found)
   adaptiveFloor: 0.3,
+  refine: 'none',        // 'arap': refine each chart's LSCM layout with ARAP (less area distortion, fewer folded borders)
+  arapIterations: 8,
+  thinSeams: true,       // keep only the local maximum across each seam line (one edge wide instead of a band)
+  minFragmentLen: 0.03,  // drop free-standing seam fragments shorter than this x bounding-box diagonal
   padding: 4,            // texels between charts
   resolution: 1024,      // texture size used to convert padding to UV units
   maxDepth: 14,
   dihedralWeight: 0.2,   // how much geometry (vs AI probability) steers automatic cuts
   rejectOverlap: true,   // split charts whose UVs overlap themselves (LSCM does not prevent this)
-  overlapTolerance: 0.0005, // ... when the overlapped share of the chart's UV area exceeds this
-                           //     (kept below the 0.1% validity limit used by the metrics)
+  overlapTolerance: 0.0008, // ... when the overlapped share of the chart's UV area exceeds this
+                           //     (charts do not overlap each other, so the atlas-wide share is an area-weighted
+                           //      average of the charts' shares: 0.08% keeps it under the 0.1% validity limit)
   flipTolerance: 0.00005,  // flipped share of the chart's 3D area that triggers a repair
   maxSlits: 4,             // local repairs (cut from the problem area to the border) before splitting the chart
 };
@@ -57,8 +62,10 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
   const { nE, edgeV, boundary, nonManifold, nV, vEdgeStart, vEdges } = mesh;
   const seam = new Uint8Array(nE);
   const adaptive = params.seamMode === 'adaptive' ? adaptiveSeams(mesh, prob, params) : null;
+  const crest = params.thinSeams ? localMaxAcross(mesh, prob) : null;
   for (let e = 0; e < nE; e++) {
     let s = prob[e] >= params.threshold || (adaptive && adaptive[e]) ? 1 : 0;
+    if (s && crest && !crest[e]) s = 0;
     if (userSeam && userSeam[e]) s = userSeam[e] > 0 ? 1 : 0;
     if (boundary[e] || nonManifold[e]) s = 1;
     seam[e] = s;
@@ -85,7 +92,9 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
         }
       }
     }
-    if (!forced && !touchesBoundary && comp.length < params.minFragment) for (const e of comp) seam[e] = 0;
+    let len = 0; for (const e of comp) len += mesh.edgeLen[e];
+    const tooShort = comp.length < params.minFragment || len < (params.minFragmentLen || 0) * mesh.diag;
+    if (!forced && !touchesBoundary && tooShort) for (const e of comp) seam[e] = 0;
   }
   return seam;
 }
@@ -96,6 +105,35 @@ export function seamsFromProbabilities(mesh, prob, params, userSeam = null) {
  * seam line (non-maximum suppression: no roughly parallel edge at the opposite vertices of the two
  * adjacent faces scores higher). Thin ridges thus give one line of edges instead of a band.
  */
+/** 1 where no roughly parallel edge at the opposite vertices of the two adjacent faces scores higher. */
+export function localMaxAcross(mesh, prob) {
+  const { nE, edgeV, edgeF, faces, pos, boundary, vEdgeStart, vEdges } = mesh;
+  const out = new Uint8Array(nE);
+  const dir = e => {
+    const a = edgeV[2 * e], b = edgeV[2 * e + 1];
+    const x = pos[3 * b] - pos[3 * a], y = pos[3 * b + 1] - pos[3 * a + 1], z = pos[3 * b + 2] - pos[3 * a + 2];
+    const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l];
+  };
+  for (let e = 0; e < nE; e++) {
+    if (boundary[e]) { out[e] = 1; continue; }
+    const p = prob[e], d = dir(e);
+    let isMax = true;
+    for (let j = 0; j < 2 && isMax; j++) {
+      const f = edgeF[2 * e + j]; if (f < 0) continue;
+      let opp = faces[3 * f]; if (opp === edgeV[2 * e] || opp === edgeV[2 * e + 1]) opp = faces[3 * f + 1];
+      if (opp === edgeV[2 * e] || opp === edgeV[2 * e + 1]) opp = faces[3 * f + 2];
+      for (let i = vEdgeStart[opp]; i < vEdgeStart[opp + 1]; i++) {
+        const o = vEdges[i]; if (o === e) continue;
+        const q = dir(o);
+        if (Math.abs(d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) < 0.7) continue;
+        if (prob[o] > p) { isMax = false; break; }
+      }
+    }
+    if (isMax) out[e] = 1;
+  }
+  return out;
+}
+
 export function adaptiveSeams(mesh, prob, params) {
   const { nE, edgeV, edgeF, faces, pos, boundary, vEdgeStart, vEdges } = mesh;
   const vals = []; for (let e = 0; e < nE; e++) if (!boundary[e]) vals.push(prob[e]);
@@ -520,6 +558,8 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
   const charts = [];
   let processedFaces = 0;
   let autoCuts = 0, overlapSplits = 0, slitRepairs = 0;
+  const cutLen = { topology: 0, distortion: 0, overlap: 0, dart: 0 };
+  const addLen = (k, edges) => { for (const e of edges) cutLen[k] += mesh.edgeLen[e]; };
 
   while (queue.length) {
     const { faces, depth, slits = 0 } = queue.pop();
@@ -532,6 +572,12 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
       res = lscm(W.P, W.T, pins);
       dist = chartDistortion(W.P, W.T, res.uv);
       if (dist.mirrored) for (let i = 0; i < res.uv.length; i += 2) res.uv[i] = -res.uv[i];
+      if (params.refine === 'arap' && faces.length >= 3 && isFinite(dist.distortion)) {
+        const u2 = arap(W.P, W.T, res.uv, { iterations: params.arapIterations });
+        const d2 = chartDistortion(W.P, W.T, u2);
+        // keep the refinement only if it is a valid improvement (ARAP has no fold-over guarantee either)
+        if (isFinite(d2.distortion) && !d2.mirrored && d2.flips <= dist.flips && d2.distortion <= dist.distortion) { res.uv = u2; dist = d2; }
+      }
       if (!isFinite(dist.distortion)) ok = false;
       else if (dist.distortion > params.maxDistortion && faces.length >= 6 && depth < params.maxDepth) ok = false;
       else if (params.rejectOverlap && faces.length >= 2 && (problemFaces = chartProblems(W.P, W.T, res.uv, params.overlapTolerance, params.flipTolerance))) { ok = false; overlapBad = true; }
@@ -544,7 +590,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
       const path = connectBoundaryLoops(mesh, W, cost);
       if (path) {
         let added = 0;
-        for (const e of path) if (!seam[e]) { seam[e] = 1; added++; }
+        for (const e of path) if (!seam[e]) { seam[e] = 1; added++; cutLen.topology += mesh.edgeLen[e]; }
         if (added) {
           autoCuts += added;
           for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth, slits });
@@ -556,7 +602,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
     if (overlapBad && slits < params.maxSlits) {
       const path = slitPath(mesh, W, problemFaces.faces, cost);
       let added = 0;
-      if (path) for (const e of path) if (!seam[e]) { seam[e] = 1; added++; }
+      if (path) for (const e of path) if (!seam[e]) { seam[e] = 1; added++; cutLen.dart += mesh.edgeLen[e]; }
       if (added) {
         autoCuts += added; slitRepairs++;
         for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth, slits: slits + 1 });
@@ -579,6 +625,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
       const cut = splitChart(mesh, faces, cost, seam, faceLocal, centroid, seeds);
       if (cut && cut.length) {
         for (const e of cut) seam[e] = 1;
+        addLen(topoBad ? 'topology' : overlapBad ? 'overlap' : 'distortion', cut);
         autoCuts += cut.length;
         for (const c of componentsOf(mesh, faces, seam, inSet)) queue.push({ faces: c, depth: depth + 1 });
         continue;
@@ -619,7 +666,7 @@ export function unwrap(mesh, prob, dihedral, paramsIn = {}, userSeam = null, onP
     stats: {
       charts: charts.length,
       seamEdges: seam.reduce((s, x, e) => s + (x && !mesh.boundary[e] ? 1 : 0), 0),
-      autoCuts, overlapSplits, slitRepairs,
+      autoCuts, overlapSplits, slitRepairs, cutLen,
       distortion: distSum / (areaSum || 1),
       flips,
       packingEfficiency: packed.efficiency,
